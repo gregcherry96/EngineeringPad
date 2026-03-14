@@ -33,7 +33,7 @@ export default function BlockWrapper({
     <Rnd
       position={{ x: block.x, y: block.y }}
       onDragStop={(e, d) => onMove(block.id, d.x, d.y)}
-      bounds="parent"
+      // Removed bounds="parent" to prevent vertical collapsing bug
       enableResizing={false}
       dragGrid={[GRID_SIZE, GRID_SIZE]}
       dragHandleClassName="drag-handle"

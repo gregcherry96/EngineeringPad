@@ -139,6 +139,11 @@ export default function App() {
   const redoStack = useRef([]);
 
   const pushUndo = useCallback((snapshot) => {
+    // Prevent pushing duplicate consecutive states
+    if (undoStack.current.length > 0) {
+      const lastState = undoStack.current[undoStack.current.length - 1];
+      if (JSON.stringify(lastState) === JSON.stringify(snapshot)) return;
+    }
     undoStack.current.push(snapshot);
     if (undoStack.current.length > UNDO_LIMIT) undoStack.current.shift();
     redoStack.current = [];
@@ -153,14 +158,18 @@ export default function App() {
   const spaceHeld          = useRef(false);
 
   // ── Evaluate ──────────────────────────────────────────────────────────────
-  const evaluateAll = useCallback((updatedBlocks, currentOverrides) => {
+const evaluateAll = useCallback((updatedBlocks, currentOverrides) => {
+    // 1. Sort blocks top-to-bottom based on their 'y' position
+    const sortedBlocks = [...updatedBlocks].sort((a, b) => a.y - b.y);
+
     const scope      = { ...MATH_SCOPE };
     const newResults = {};
     const newRaw     = {};
     const newVars    = {};
     const baseKeys   = new Set(Object.keys(MATH_SCOPE));
 
-    for (const block of updatedBlocks) {
+    // 2. Iterate through the sorted blocks
+    for (const block of sortedBlocks) {
       if (block.type !== 'math' || !block.expression.trim()) continue;
       try {
         const result    = math.evaluate(block.expression, scope);
@@ -281,9 +290,13 @@ export default function App() {
   }, []);
 
   const handleNudge = useCallback((id, dx, dy) => {
-    setBlocks(prev => prev.map(b =>
-      b.id === id ? { ...b, x: Math.round((b.x + dx) / GRID_SIZE) * GRID_SIZE, y: Math.round((b.y + dy) / GRID_SIZE) * GRID_SIZE } : b
-    ));
+    setBlocks(prev => prev.map(b => {
+      if (b.id !== id) return b;
+      // Allow fine-grained sub-grid nudging if not perfectly aligned
+      const newX = b.x % GRID_SIZE === 0 ? b.x + dx : Math.round((b.x + dx) / GRID_SIZE) * GRID_SIZE;
+      const newY = b.y % GRID_SIZE === 0 ? b.y + dy : Math.round((b.y + dy) / GRID_SIZE) * GRID_SIZE;
+      return { ...b, x: newX, y: newY };
+    }));
   }, []);
 
   const handleTransform = useCallback((id, newType) => {

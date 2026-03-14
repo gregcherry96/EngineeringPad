@@ -6,33 +6,20 @@ const GRID_SIZE = 20;
 
 // Common units for autocomplete suggestions
 const UNIT_SUGGESTIONS = [
-  // Force/mass/acceleration
   'N','kN','MN','kg','g','mg','lb','lbf','ton',
-  // Energy/power
   'J','kJ','MJ','W','kW','MW','eV','cal','kcal','kWh','BTU',
-  // Pressure
   'Pa','kPa','MPa','GPa','bar','mbar','atm','psi','mmHg',
-  // Length
   'm','km','cm','mm','um','nm','ft','in','mi','yd',
-  // Time
   's','ms','us','ns','min','h','hr','day',
-  // Velocity
   'm/s','km/h','mph','kn',
-  // Temperature
   'K','degC','degF',
-  // Electricity
   'V','mV','kV','A','mA','kA','ohm','kohm','Mohm','F','uF','nF','pF','H','mH','uH',
-  // Frequency
   'Hz','kHz','MHz','GHz',
-  // Angle
   'rad','deg',
-  // Area/volume
   'm^2','cm^2','km^2','m^3','cm^3','L','mL',
-  // Misc
   'mol','cd','lm','lx',
 ];
 
-// ─── Unit autocomplete dropdown ───────────────────────────────────────────────
 function UnitAutocomplete({ draft, onSelect }) {
   if (!draft.trim()) return null;
   const q = draft.toLowerCase();
@@ -49,7 +36,6 @@ function UnitAutocomplete({ draft, onSelect }) {
   );
 }
 
-// ─── Inline unit editor ───────────────────────────────────────────────────────
 function UnitEditor({ id, unitStr, unitIsOverridden, hasUnitResult, onUnitChange, onUnitReset }) {
   const [editing, setEditing]   = useState(false);
   const [draft, setDraft]       = useState('');
@@ -120,7 +106,6 @@ function UnitEditor({ id, unitStr, unitIsOverridden, hasUnitResult, onUnitChange
   );
 }
 
-// ─── Copy feedback ────────────────────────────────────────────────────────────
 function CopyableNum({ numStr }) {
   const [copied, setCopied] = useState(false);
 
@@ -145,7 +130,6 @@ function CopyableNum({ numStr }) {
   );
 }
 
-// ─── Main MathBlock ───────────────────────────────────────────────────────────
 export default function MathBlock({
   id, initialValue,
   numStr, unitStr, hasError, errorLabel, errorMsg,
@@ -155,7 +139,9 @@ export default function MathBlock({
   onUnitChange, onUnitReset,
 }) {
   const mathFieldRef   = useRef(null);
+  const tooltipRef     = useRef(null);
   const isTransforming = useRef(false);
+  const hasInitialized = useRef(false); // Fix: track initialization to prevent focus stealing
   const callbacks      = useRef({ onDelete, onChange, onEnter, onNudge, onTransform });
   const [showTip, setShowTip] = useState(false);
 
@@ -163,11 +149,28 @@ export default function MathBlock({
     [onDelete, onChange, onEnter, onNudge, onTransform]);
 
   useEffect(() => {
+    if (showTip && tooltipRef.current) {
+      const rect = tooltipRef.current.getBoundingClientRect();
+      if (rect.right > window.innerWidth) {
+        tooltipRef.current.style.left = 'auto';
+        tooltipRef.current.style.right = '0';
+      } else {
+        tooltipRef.current.style.left = '0';
+        tooltipRef.current.style.right = 'auto';
+      }
+    }
+  }, [showTip]);
+
+  useEffect(() => {
     const mf = mathFieldRef.current;
     if (!mf) return;
 
-    if (initialValue && mf.getValue() === '') mf.setValue(initialValue);
-    setTimeout(() => mf.focus(), 50);
+    // Fix: Only run the focus assignment once when the block mounts
+    if (!hasInitialized.current) {
+      if (initialValue && mf.getValue() === '') mf.setValue(initialValue);
+      setTimeout(() => mf.focus(), 50);
+      hasInitialized.current = true;
+    }
 
     const handleInput = () => {
       const raw = mf.getValue('ascii-math');
@@ -183,7 +186,6 @@ export default function MathBlock({
     };
 
     const handleKeyDown = (e) => {
-      // " → text block, # → section block
       if (!mf.getValue()) {
         if (e.key === '"' || e.key === "'") { e.preventDefault(); isTransforming.current = true; callbacks.current.onTransform(id, 'text'); return; }
         if (e.key === '#') { e.preventDefault(); isTransforming.current = true; callbacks.current.onTransform(id, 'section'); return; }
@@ -240,7 +242,7 @@ export default function MathBlock({
           onMouseLeave={() => setShowTip(false)}
         >
           {errorLabel ?? 'error'}
-          {showTip && errorMsg && <span className="math-error-tooltip">{errorMsg}</span>}
+          {showTip && errorMsg && <span ref={tooltipRef} className="math-error-tooltip">{errorMsg}</span>}
         </span>
       )}
     </>
