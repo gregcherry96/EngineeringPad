@@ -110,7 +110,26 @@ body, html { margin: 0; padding: 0; overflow: hidden; font-family: 'Inter', sans
     linear-gradient(to bottom, #efece6 1px, transparent 1px);
   background-size: 100px 100px, 100px 100px, 20px 20px, 20px 20px;
   position: relative;
-  overflow: hidden;
+
+  /* Changed from 'hidden' to 'auto' to enable native scrollbars */
+  overflow: auto;
+}
+
+/* ─── Custom Scrollbar Styling ───────────────────────────────────────────── */
+.graph-paper::-webkit-scrollbar {
+  width: 14px;
+  height: 14px;
+}
+.graph-paper::-webkit-scrollbar-track {
+  background: #faf8f3;
+}
+.graph-paper::-webkit-scrollbar-thumb {
+  background-color: #dcd8d0;
+  border-radius: 10px;
+  border: 3px solid #faf8f3;
+}
+.graph-paper::-webkit-scrollbar-thumb:hover {
+  background-color: #c4beb4;
 }
 
 /* ─── Sidebar ────────────────────────────────────────────────────────────── */

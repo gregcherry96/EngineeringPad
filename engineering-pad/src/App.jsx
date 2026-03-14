@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import * as math from 'mathjs';
 import { MATH_SCOPE } from './constants';
 import Sidebar from './Sidebar';
@@ -16,11 +16,27 @@ const snap = (val, zoom = 1) => Math.round(val / (GRID_SIZE * zoom)) * GRID_SIZE
 let nextId = 1;
 const makeBlock = (x, y, type = 'math') => ({ id: nextId++, x, y, type, expression: '' });
 
-// ─── Superscript helpers ──────────────────────────────────────────────────────
+// ─── Utility helpers ──────────────────────────────────────────────────────────
 const SUP = {'-':'⁻','0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹'};
 const toSup = n => String(n).split('').map(c => SUP[c] ?? c).join('');
 
-// ─── Number formatter ─────────────────────────────────────────────────────────
+function debounce(func, wait) {
+  let timeout;
+  return function(...args) {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func.apply(this, args), wait);
+  };
+}
+
+// ─── Number formatter & Unit builder (Omitted for brevity, keep existing functions) ───
+// KEEP YOUR EXISTING formatNum, buildUnitStr, DIM_TO_UNIT, simplifyAndFormat, convertResult, formatMathResult, classifyError
+
+export function convertResult(rawResult, targetUnit) {
+  if (!rawResult?.isUnit) throw new Error('Not a unit quantity');
+  const val = rawResult.to(targetUnit).toNumber(targetUnit);
+  return { numStr: formatNum(val), unitStr: targetUnit === 'ohm' ? 'Ω' : targetUnit };
+}
+
 function formatNum(n) {
   if (n === null || n === undefined || !isFinite(n)) return String(n);
   const abs = Math.abs(n);
@@ -31,7 +47,6 @@ function formatNum(n) {
   return String(parseFloat(n.toPrecision(7)));
 }
 
-// ─── Unit string builder ──────────────────────────────────────────────────────
 function buildUnitStr(unitObj) {
   if (!unitObj?.units?.length) return '';
   const pos = [], neg = [];
@@ -48,7 +63,6 @@ function buildUnitStr(unitObj) {
   return pos.join(' ') + ' / ' + neg.join(' ');
 }
 
-// ─── Dimension → named SI unit ────────────────────────────────────────────────
 const DIM_TO_UNIT = {
   '0,0,-1,0,0,0,0,0,0':   'Hz',
   '1,1,-2,0,0,0,0,0,0':   'N',
@@ -77,7 +91,6 @@ function simplifyAndFormat(unitObj) {
       return { numStr: formatNum(val), unitStr: named === 'ohm' ? 'Ω' : named };
     } catch { /* fall through */ }
   }
-  // Compound fallback
   try {
     const parts = unitObj.units.filter(t => (t.power ?? 1) !== 0).map(t => {
       const tok = (t.prefix?.name ?? '') + (t.unit?.name ?? '');
@@ -89,12 +102,6 @@ function simplifyAndFormat(unitObj) {
   } catch {
     return { numStr: formatNum(unitObj.value ?? 0), unitStr: buildUnitStr(unitObj) };
   }
-}
-
-export function convertResult(rawResult, targetUnit) {
-  if (!rawResult?.isUnit) throw new Error('Not a unit quantity');
-  const val = rawResult.to(targetUnit).toNumber(targetUnit);
-  return { numStr: formatNum(val), unitStr: targetUnit === 'ohm' ? 'Ω' : targetUnit };
 }
 
 function formatMathResult(result) {
@@ -131,7 +138,6 @@ export default function App() {
   const [selectedId, setSelectedId]       = useState(null);
 
   // ── Canvas transform ──────────────────────────────────────────────────────
-  const [pan,  setPan]  = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
 
   // ── Undo history ──────────────────────────────────────────────────────────
@@ -139,7 +145,6 @@ export default function App() {
   const redoStack = useRef([]);
 
   const pushUndo = useCallback((snapshot) => {
-    // Prevent pushing duplicate consecutive states
     if (undoStack.current.length > 0) {
       const lastState = undoStack.current[undoStack.current.length - 1];
       if (JSON.stringify(lastState) === JSON.stringify(snapshot)) return;
@@ -153,14 +158,17 @@ export default function App() {
   const rawResultsRef    = useRef({});
   const activeMathFieldRef = useRef(null);
   const graphPaperRef      = useRef(null);
-  const panOriginRef       = useRef(null); // { clientX, clientY, panX, panY }
+  const panOriginRef       = useRef(null); // Adjusted for native scrolling
   const isPanning          = useRef(false);
   const spaceHeld          = useRef(false);
 
-  // ── Evaluate ──────────────────────────────────────────────────────────────
-const evaluateAll = useCallback((updatedBlocks, currentOverrides) => {
-    // 1. Sort blocks top-to-bottom based on their 'y' position
-    const sortedBlocks = [...updatedBlocks].sort((a, b) => a.y - b.y);
+  // ── Evaluate (Immediate & Debounced) ──────────────────────────────────────
+  const evaluateAllImmediate = useCallback((updatedBlocks, currentOverrides) => {
+    const sortedBlocks = [...updatedBlocks].sort((a, b) => {
+      const yDiff = a.y - b.y;
+      if (Math.abs(yDiff) < 15) return a.x - b.x;
+      return yDiff;
+    });
 
     const scope      = { ...MATH_SCOPE };
     const newResults = {};
@@ -168,7 +176,6 @@ const evaluateAll = useCallback((updatedBlocks, currentOverrides) => {
     const newVars    = {};
     const baseKeys   = new Set(Object.keys(MATH_SCOPE));
 
-    // 2. Iterate through the sorted blocks
     for (const block of sortedBlocks) {
       if (block.type !== 'math' || !block.expression.trim()) continue;
       try {
@@ -208,6 +215,11 @@ const evaluateAll = useCallback((updatedBlocks, currentOverrides) => {
     setUserVars(newVars);
   }, []);
 
+  const evaluateAllDebounced = useMemo(
+    () => debounce(evaluateAllImmediate, 150),
+    [evaluateAllImmediate]
+  );
+
   // ── Unit override ─────────────────────────────────────────────────────────
   const handleUnitChange = useCallback((id, targetUnit) => {
     const raw = rawResultsRef.current[id];
@@ -233,10 +245,14 @@ const evaluateAll = useCallback((updatedBlocks, currentOverrides) => {
   // ── Block handlers ────────────────────────────────────────────────────────
   const canvasToWorld = useCallback((clientX, clientY) => {
     const rect = graphPaperRef.current.getBoundingClientRect();
-    const wx = (clientX - rect.left - pan.x) / zoom;
-    const wy = (clientY - rect.top  - pan.y) / zoom;
+    // Factor in the native scrollbar positions
+    const scrollX = graphPaperRef.current.scrollLeft;
+    const scrollY = graphPaperRef.current.scrollTop;
+
+    const wx = (clientX - rect.left + scrollX) / zoom;
+    const wy = (clientY - rect.top + scrollY) / zoom;
     return { x: Math.round(wx / GRID_SIZE) * GRID_SIZE, y: Math.round(wy / GRID_SIZE) * GRID_SIZE };
-  }, [pan, zoom]);
+  }, [zoom]);
 
   const handleCanvasClick = useCallback((e) => {
     if (isPanning.current) return;
@@ -247,38 +263,40 @@ const evaluateAll = useCallback((updatedBlocks, currentOverrides) => {
     setBlocks(prev => {
       const updated = [...prev, newBlock];
       pushUndo(prev);
-      evaluateAll(updated, unitOverrides);
+      evaluateAllImmediate(updated, unitOverrides);
       return updated;
     });
-  }, [canvasToWorld, evaluateAll, unitOverrides, pushUndo]);
+  }, [canvasToWorld, evaluateAllImmediate, unitOverrides, pushUndo]);
 
   const handleChange = useCallback((id, expression) => {
     setBlocks(prev => {
       const updated = prev.map(b => b.id === id ? { ...b, expression } : b);
-      evaluateAll(updated, unitOverrides);
+      evaluateAllDebounced(updated, unitOverrides);
       return updated;
     });
-  }, [evaluateAll, unitOverrides]);
+  }, [evaluateAllDebounced, unitOverrides]);
 
   const handleMove = useCallback((id, x, y) => {
     setBlocks(prev => {
       pushUndo(prev);
-      return prev.map(b => b.id === id ? { ...b, x, y } : b);
+      const updated = prev.map(b => b.id === id ? { ...b, x, y } : b);
+      evaluateAllImmediate(updated, unitOverrides);
+      return updated;
     });
-  }, [pushUndo]);
+  }, [pushUndo, evaluateAllImmediate, unitOverrides]);
 
   const handleDelete = useCallback((id) => {
     setBlocks(prev => {
       pushUndo(prev);
       const updated = prev.filter(b => b.id !== id);
-      evaluateAll(updated, unitOverrides);
+      evaluateAllImmediate(updated, unitOverrides);
       return updated;
     });
     setResults(p  => { const n = { ...p }; delete n[id]; return n; });
     setUnitOverrides(p => { const n = { ...p }; delete n[id]; return n; });
     delete rawResultsRef.current[id];
     if (selectedId === id) setSelectedId(null);
-  }, [evaluateAll, unitOverrides, pushUndo, selectedId]);
+  }, [evaluateAllImmediate, unitOverrides, pushUndo, selectedId]);
 
   const handleEnter = useCallback((id) => {
     setBlocks(prev => {
@@ -290,14 +308,17 @@ const evaluateAll = useCallback((updatedBlocks, currentOverrides) => {
   }, []);
 
   const handleNudge = useCallback((id, dx, dy) => {
-    setBlocks(prev => prev.map(b => {
-      if (b.id !== id) return b;
-      // Allow fine-grained sub-grid nudging if not perfectly aligned
-      const newX = b.x % GRID_SIZE === 0 ? b.x + dx : Math.round((b.x + dx) / GRID_SIZE) * GRID_SIZE;
-      const newY = b.y % GRID_SIZE === 0 ? b.y + dy : Math.round((b.y + dy) / GRID_SIZE) * GRID_SIZE;
-      return { ...b, x: newX, y: newY };
-    }));
-  }, []);
+    setBlocks(prev => {
+      const updated = prev.map(b => {
+        if (b.id !== id) return b;
+        const newX = b.x % GRID_SIZE === 0 ? b.x + dx : Math.round((b.x + dx) / GRID_SIZE) * GRID_SIZE;
+        const newY = b.y % GRID_SIZE === 0 ? b.y + dy : Math.round((b.y + dy) / GRID_SIZE) * GRID_SIZE;
+        return { ...b, x: newX, y: newY };
+      });
+      evaluateAllImmediate(updated, unitOverrides);
+      return updated;
+    });
+  }, [evaluateAllImmediate, unitOverrides]);
 
   const handleTransform = useCallback((id, newType) => {
     setBlocks(prev => prev.map(b => b.id === id ? { ...b, type: newType, expression: '' } : b));
@@ -316,38 +337,48 @@ const evaluateAll = useCallback((updatedBlocks, currentOverrides) => {
     const prev = undoStack.current.pop();
     redoStack.current.push(blocks);
     setBlocks(prev);
-    evaluateAll(prev, unitOverrides);
-  }, [blocks, evaluateAll, unitOverrides]);
+    evaluateAllImmediate(prev, unitOverrides);
+  }, [blocks, evaluateAllImmediate, unitOverrides]);
 
   const handleRedo = useCallback(() => {
     if (!redoStack.current.length) return;
     const next = redoStack.current.pop();
     undoStack.current.push(blocks);
     setBlocks(next);
-    evaluateAll(next, unitOverrides);
-  }, [blocks, evaluateAll, unitOverrides]);
+    evaluateAllImmediate(next, unitOverrides);
+  }, [blocks, evaluateAllImmediate, unitOverrides]);
 
-  // ── Zoom ──────────────────────────────────────────────────────────────────
+  // ── Zoom (Updating scroll positions instead of CSS translations) ──────────
   const handleWheel = useCallback((e) => {
     if (!e.ctrlKey && !e.metaKey) return;
     e.preventDefault();
-    const rect  = graphPaperRef.current.getBoundingClientRect();
-    const cx    = e.clientX - rect.left;
-    const cy    = e.clientY - rect.top;
+    const rect = graphPaperRef.current.getBoundingClientRect();
+    const cx = e.clientX - rect.left;
+    const cy = e.clientY - rect.top;
+
     const delta = e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP;
     setZoom(z => {
       const newZ = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z + delta));
       const scale = newZ / z;
-      setPan(p => ({ x: cx - (cx - p.x) * scale, y: cy - (cy - p.y) * scale }));
+
+      // Keep the cursor positioned over the same spot while zooming natively
+      if (graphPaperRef.current) {
+        const scrollX = graphPaperRef.current.scrollLeft;
+        const scrollY = graphPaperRef.current.scrollTop;
+        requestAnimationFrame(() => {
+          graphPaperRef.current.scrollLeft = scrollX + (cx + scrollX) * (scale - 1);
+          graphPaperRef.current.scrollTop = scrollY + (cy + scrollY) * (scale - 1);
+        });
+      }
       return newZ;
     });
   }, []);
 
   const zoomIn  = () => setZoom(z => Math.min(MAX_ZOOM, parseFloat((z + ZOOM_STEP).toFixed(2))));
   const zoomOut = () => setZoom(z => Math.max(MIN_ZOOM, parseFloat((z - ZOOM_STEP).toFixed(2))));
-  const zoomReset = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
+  const zoomReset = () => { setZoom(1); };
 
-  // ── Pan (space + drag or middle-click drag) ───────────────────────────────
+  // ── Native Pan (Dragging the scrollbar) ───────────────────────────────────
   useEffect(() => {
     const onKeyDown = (e) => {
       if (e.code === 'Space' && !e.target.closest('input, textarea, math-field')) {
@@ -372,16 +403,26 @@ const evaluateAll = useCallback((updatedBlocks, currentOverrides) => {
     if (e.button === 1 || spaceHeld.current) {
       e.preventDefault();
       isPanning.current = true;
-      panOriginRef.current = { clientX: e.clientX, clientY: e.clientY, panX: pan.x, panY: pan.y };
+      panOriginRef.current = {
+        clientX: e.clientX,
+        clientY: e.clientY,
+        scrollLeft: graphPaperRef.current.scrollLeft,
+        scrollTop: graphPaperRef.current.scrollTop
+      };
       graphPaperRef.current?.classList.add('panning-active');
     }
-  }, [pan]);
+  }, []);
 
   const handleMouseMove = useCallback((e) => {
     if (!isPanning.current || !panOriginRef.current) return;
     const dx = e.clientX - panOriginRef.current.clientX;
     const dy = e.clientY - panOriginRef.current.clientY;
-    setPan({ x: panOriginRef.current.panX + dx, y: panOriginRef.current.panY + dy });
+
+    // Instead of altering a `pan` state, directly scrub the container's native scroll
+    if (graphPaperRef.current) {
+      graphPaperRef.current.scrollLeft = panOriginRef.current.scrollLeft - dx;
+      graphPaperRef.current.scrollTop = panOriginRef.current.scrollTop - dy;
+    }
   }, []);
 
   const handleMouseUp = useCallback(() => {
@@ -391,13 +432,16 @@ const evaluateAll = useCallback((updatedBlocks, currentOverrides) => {
     }
   }, []);
 
-  // Attach wheel listener (non-passive so we can preventDefault)
   useEffect(() => {
     const el = graphPaperRef.current;
     if (!el) return;
     el.addEventListener('wheel', handleWheel, { passive: false });
     return () => el.removeEventListener('wheel', handleWheel);
   }, [handleWheel]);
+
+  // ─── Dynamic Canvas Bounds Calculation ─────────────────────────────────────
+  const maxCanvasWidth = Math.max(2000, ...blocks.map(b => b.x + 800));
+  const maxCanvasHeight = Math.max(2000, ...blocks.map(b => b.y + 800));
 
   // ─── Render ────────────────────────────────────────────────────────────────
   const canUndo = undoStack.current.length > 0;
@@ -469,10 +513,16 @@ const evaluateAll = useCallback((updatedBlocks, currentOverrides) => {
             </div>
           )}
 
-          {/* Zoom / pan transform layer */}
+          {/* Canvas area scaled for zooming and sized for scrollbars */}
           <div
             className="canvas-area"
-            style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: '0 0' }}
+            style={{
+              transform: `scale(${zoom})`,
+              transformOrigin: '0 0',
+              // We multiply the CSS bounds by the zoom so the scrollbars extend properly
+              minWidth: `${maxCanvasWidth * zoom}px`,
+              minHeight: `${maxCanvasHeight * zoom}px`
+            }}
           >
             {blocks.map(block => {
               const res = results[block.id] ?? {};
