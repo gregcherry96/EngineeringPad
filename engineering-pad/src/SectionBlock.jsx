@@ -1,51 +1,54 @@
 import React, { useEffect, useRef } from 'react';
 
-export default function SectionBlock({
-  id, initialValue = '', setFocus, onDelete, onChange, onEnter, onNudge
-}) {
-  const ref = useRef(null);
+const GRID_SIZE = 20;
+
+export default function SectionBlock({ id, initialValue, setFocus, onDelete, onChange, onEnter, onNudge }) {
+  const inputRef = useRef(null);
 
   useEffect(() => {
-    if (ref.current) {
-      ref.current.focus();
-      const len = ref.current.value.length;
-      ref.current.setSelectionRange(len, len);
+    if (inputRef.current) {
+      inputRef.current.focus();
     }
   }, []);
 
   const handleKeyDown = (e) => {
-    if (e.key === 'Escape') { ref.current.blur(); return; }
+    if (e.key === 'Escape') {
+      inputRef.current?.blur();
+      return;
+    }
     if (e.key === 'Enter') {
       e.preventDefault();
-      ref.current.blur();
+      inputRef.current?.blur();
       onEnter(id);
+      return;
     }
-    if ((e.ctrlKey || e.metaKey) && e.key.startsWith('Arrow')) {
+    // Nudging with arrow keys (Ctrl + Arrow)
+    if (e.key.startsWith('Arrow') && (e.ctrlKey || e.metaKey || !inputRef.current.value)) {
       e.preventDefault();
-      const step = 20;
-      if (e.key === 'ArrowUp')    onNudge(id, 0, -step);
-      if (e.key === 'ArrowDown')  onNudge(id, 0,  step);
-      if (e.key === 'ArrowLeft')  onNudge(id, -step, 0);
-      if (e.key === 'ArrowRight') onNudge(id,  step, 0);
+      const D = { ArrowUp: [0, -GRID_SIZE], ArrowDown: [0, GRID_SIZE], ArrowLeft: [-GRID_SIZE, 0], ArrowRight: [GRID_SIZE, 0] };
+      const [dx, dy] = D[e.key] ?? [0, 0];
+      onNudge(id, dx, dy);
     }
   };
 
-  const handleBlur = (e) => {
+  const handleBlur = () => {
     setFocus(false);
-    if (!e.target.value.trim()) onDelete(id);
+    if (!inputRef.current?.value.trim()) {
+      onDelete(id); // Delete if empty
+    }
   };
 
   return (
     <input
-      ref={ref}
-      type="text"
+      ref={inputRef}
       className="section-block-input"
-      defaultValue={initialValue}
+      type="text"
+      value={initialValue}
       onChange={e => onChange(id, e.target.value)}
+      onKeyDown={handleKeyDown}
       onFocus={() => setFocus(true)}
       onBlur={handleBlur}
-      onKeyDown={handleKeyDown}
-      placeholder="Section heading…"
+      placeholder="Section Heading"
       spellCheck={false}
     />
   );

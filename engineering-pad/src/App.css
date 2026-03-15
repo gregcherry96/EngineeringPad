@@ -102,16 +102,25 @@ body, html { margin: 0; padding: 0; overflow: hidden; font-family: 'Inter', sans
 .graph-paper {
   flex: 1;
   height: 100%;
-  background-color: #faf8f3;
+  /* Warm "buff" paper background */
+  background-color: #fcfbf6;
   background-image:
-    linear-gradient(to right,  #dcd8d0 1px, transparent 1px),
-    linear-gradient(to bottom, #dcd8d0 1px, transparent 1px),
-    linear-gradient(to right,  #efece6 1px, transparent 1px),
-    linear-gradient(to bottom, #efece6 1px, transparent 1px);
-  background-size: 100px 100px, 100px 100px, 20px 20px, 20px 20px;
-  position: relative;
+    /* Heavy green left margin line */
+    linear-gradient(to right, #2a6857 2px, transparent 2px),
+    /* Major grid lines (every 100px) - slightly darker green/blue */
+    linear-gradient(to right,  #c1dfd4 1px, transparent 1px),
+    linear-gradient(to bottom, #c1dfd4 1px, transparent 1px),
+    /* Minor grid lines (every 20px) - very light green/blue */
+    linear-gradient(to right,  #e6f2ee 1px, transparent 1px),
+    linear-gradient(to bottom, #e6f2ee 1px, transparent 1px);
 
-  /* Changed from 'hidden' to 'auto' to enable native scrollbars */
+  /* The first 100px controls the left margin line */
+  background-size: 100% 100%, 100px 100px, 100px 100px, 20px 20px, 20px 20px;
+  /* Shift the heavy margin line exactly 100px from the left */
+  background-position: 100px 0, 0 0, 0 0, 0 0, 0 0;
+  background-repeat: no-repeat, repeat, repeat, repeat, repeat;
+
+  position: relative;
   overflow: auto;
 }
 
@@ -515,6 +524,20 @@ math-field {
 }
 
 /* ─── Text block ─────────────────────────────────────────────────────────── */
+.text-block-input {
+  background: transparent;
+  border: none;
+  outline: none;
+  font-family: 'Lora', serif; /* Serif font for notes looks professional */
+  font-size: 16px;
+  color: #33312c;
+  resize: none;
+  overflow: hidden; /* Hide scrollbar since it auto-resizes */
+  width: 400px;
+  line-height: 1.5;
+  padding: 4px;
+}
+
 .text-block-wrapper {
   display: flex; align-items: flex-start;
   padding: 4px 10px;
@@ -637,3 +660,121 @@ math-field {
   100% { box-shadow: 0 0 0 10px rgba(37,99,180,0);   }
 }
 .block-container.just-placed .math-wrapper { animation: place-pulse 0.4s ease-out; }
+
+.section-block-input {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid #2a6857; /* Matches the margin line */
+  outline: none;
+  font-family: 'Inter', sans-serif;
+  font-size: 22px;
+  font-weight: 600;
+  color: #1a1714;
+  width: 500px;
+  padding: 8px 4px 4px 4px;
+  margin-bottom: 8px;
+}
+
+.section-block-input::placeholder {
+  color: #a8b3af;
+  font-weight: 400;
+}
+
+/* ─── 1. Springy Pop-in Animation ────────────────────────────────────────── */
+@keyframes popIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.92) translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.block-container {
+  position: relative;
+  /* Use a cubic-bezier for a slight 'bounce' effect */
+  animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  transition: opacity 0.3s ease;
+}
+
+/* ─── 2. Focus Mode Dimming ──────────────────────────────────────────────── */
+/* When the canvas has an active block, slightly dim the inactive ones */
+.canvas-area:focus-within .block-container:not(:focus-within) {
+  opacity: 0.6;
+}
+
+.canvas-area:focus-within .block-container:not(:focus-within):hover {
+  opacity: 0.9; /* Brighten back up if hovered */
+}
+
+/* ─── 3. Sleek Floating Action Menu ──────────────────────────────────────── */
+.block-actions-menu {
+  position: absolute;
+  top: -40px;
+  right: 0;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(8px);
+  border: 1px solid #e0dbd2;
+  border-radius: 8px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.06);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  opacity: 0;
+  transform: translateY(8px) scale(0.95);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
+  z-index: 100;
+}
+
+/* Show the menu smoothly when hovering the container or focusing the block */
+.block-container:hover .block-actions-menu,
+.block-container:focus-within .block-actions-menu {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+/* Action Menu Buttons */
+.action-icon-btn {
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6a6560;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-size: 14px;
+}
+
+.action-icon-btn:hover {
+  background: #f4f1ec;
+  color: #1a1714;
+}
+
+.action-icon-btn.delete-btn:hover {
+  background: #feeef0;
+  color: #d93838;
+}
+
+/* Hide the old static drag handle and replace it inside the menu */
+.drag-handle {
+  display: none;
+}
+.block-actions-menu .drag-handle-new {
+  cursor: grab;
+  padding: 4px;
+  color: #a8b3af;
+  display: flex;
+  align-items: center;
+}
+.block-actions-menu .drag-handle-new:active {
+  cursor: grabbing;
+}

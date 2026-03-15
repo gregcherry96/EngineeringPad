@@ -33,25 +33,40 @@ export default function BlockWrapper({
     <Rnd
       position={{ x: block.x, y: block.y }}
       onDragStop={(e, d) => onMove(block.id, d.x, d.y)}
-      // Removed bounds="parent" to prevent vertical collapsing bug
       enableResizing={false}
       dragGrid={[GRID_SIZE, GRID_SIZE]}
-      dragHandleClassName="drag-handle"
+      dragHandleClassName="drag-handle-new" /* Updated to target the new handle */
       style={{ position: 'absolute', zIndex: isFocused ? 20 : isSelected ? 15 : 10 }}
     >
       <div className={`block-container block-type-${block.type}`}>
-        <div className="drag-handle" title="Drag to move">
-          <div className="drag-handle-dots">
-            <span /><span /><span /><span /><span /><span />
+
+        {/* ─── NEW: Floating Action Menu ─── */}
+        <div className="block-actions-menu">
+          {/* Drag Handle */}
+          <div className="drag-handle-new" title="Drag to move block">
+            ⠿ {/* Unicode Braille pattern makes a great drag grip icon */}
           </div>
+
+          {/* Type Indicator / Transform Button */}
+          <button
+            className="action-icon-btn"
+            title={`Current: ${block.type}. Click to change.`}
+            onClick={() => onTransform(block.id, block.type === 'math' ? 'text' : 'math')}
+          >
+            {block.type === 'math' ? '𝑓' : 'T'}
+          </button>
+
+          {/* Delete Button */}
+          <button
+            className="action-icon-btn delete-btn"
+            title="Delete block"
+            onMouseDown={e => { e.stopPropagation(); onDelete(block.id); }}
+          >
+            ✕
+          </button>
         </div>
 
         <div className={wrapperClass}>
-          {/* Type badge — shown while focused */}
-          <span className="block-type-badge">
-            {block.type === 'math' ? 'math' : block.type === 'section' ? 'heading' : 'text'}
-          </span>
-
           {block.type === 'math' && (
             <MathBlock
               id={block.id}
@@ -99,12 +114,6 @@ export default function BlockWrapper({
             />
           )}
         </div>
-
-        <button
-          className="block-delete-btn"
-          title="Delete block"
-          onMouseDown={e => { e.stopPropagation(); onDelete(block.id); }}
-        >×</button>
       </div>
     </Rnd>
   );
