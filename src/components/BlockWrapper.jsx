@@ -10,10 +10,10 @@ export default function BlockWrapper({
   block,
   numStr, unitStr, hasError, errorLabel, errorMsg,
   hasUnitResult, unitIsOverridden,
-  isSelected,
+  isSelected, isDependency,
   activeMathFieldRef,
   onSelect, onMove, onDelete, onChange, onEnter, onNudge, onTransform,
-  onUnitChange, onUnitReset,
+  onUnitChange, onUnitReset, onLeaveBlock
 }) {
   const [isFocused, setIsFocused] = useState(false);
 
@@ -27,6 +27,7 @@ export default function BlockWrapper({
     isFocused  && 'focused',
     isSelected && !isFocused && 'selected',
     hasError   && !isFocused && 'has-error',
+    isDependency && !isFocused && 'is-dependency'
   ].filter(Boolean).join(' ');
 
   return (
@@ -35,19 +36,15 @@ export default function BlockWrapper({
       onDragStop={(e, d) => onMove(block.id, d.x, d.y)}
       enableResizing={false}
       dragGrid={[GRID_SIZE, GRID_SIZE]}
-      dragHandleClassName="drag-handle-new" /* Updated to target the new handle */
+      dragHandleClassName="drag-handle-new"
       style={{ position: 'absolute', zIndex: isFocused ? 20 : isSelected ? 15 : 10 }}
     >
-      <div className={`block-container block-type-${block.type}`}>
+      <div id={`block-container-${block.id}`} className={`block-container block-type-${block.type}`}>
 
-        {/* ─── NEW: Floating Action Menu ─── */}
         <div className="block-actions-menu">
-          {/* Drag Handle */}
           <div className="drag-handle-new" title="Drag to move block">
-            ⠿ {/* Unicode Braille pattern makes a great drag grip icon */}
+            ⠿ 
           </div>
-
-          {/* Type Indicator / Transform Button */}
           <button
             className="action-icon-btn"
             title={`Current: ${block.type}. Click to change.`}
@@ -55,8 +52,6 @@ export default function BlockWrapper({
           >
             {block.type === 'math' ? '𝑓' : 'T'}
           </button>
-
-          {/* Delete Button */}
           <button
             className="action-icon-btn delete-btn"
             title="Delete block"
@@ -87,6 +82,7 @@ export default function BlockWrapper({
               onTransform={onTransform}
               onUnitChange={onUnitChange}
               onUnitReset={onUnitReset}
+              onLeaveBlock={onLeaveBlock}
             />
           )}
 
@@ -99,6 +95,7 @@ export default function BlockWrapper({
               onChange={onChange}
               onEnter={onEnter}
               onNudge={onNudge}
+              onLeaveBlock={onLeaveBlock}
             />
           )}
 
@@ -111,6 +108,7 @@ export default function BlockWrapper({
               onChange={onChange}
               onEnter={onEnter}
               onNudge={onNudge}
+              onLeaveBlock={onLeaveBlock}
             />
           )}
         </div>

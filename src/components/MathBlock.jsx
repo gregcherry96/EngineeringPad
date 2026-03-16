@@ -4,7 +4,6 @@ import { sanitizeMath, sanitizeMathDebug } from './sanitizeMath';
 
 const GRID_SIZE = 20;
 
-// Common units for autocomplete suggestions
 const UNIT_SUGGESTIONS = [
   'N','kN','MN','kg','g','mg','lb','lbf','ton',
   'J','kJ','MJ','W','kW','MW','eV','cal','kcal','kWh','BTU',
@@ -136,17 +135,17 @@ export default function MathBlock({
   hasUnitResult, unitIsOverridden,
   activeMathFieldRef,
   setFocus, onDelete, onChange, onEnter, onNudge, onTransform,
-  onUnitChange, onUnitReset,
+  onUnitChange, onUnitReset, onLeaveBlock
 }) {
   const mathFieldRef   = useRef(null);
   const tooltipRef     = useRef(null);
   const isTransforming = useRef(false);
-  const hasInitialized = useRef(false); // Fix: track initialization to prevent focus stealing
-  const callbacks      = useRef({ onDelete, onChange, onEnter, onNudge, onTransform });
+  const hasInitialized = useRef(false);
+  const callbacks      = useRef({ onDelete, onChange, onEnter, onNudge, onTransform, onLeaveBlock });
   const [showTip, setShowTip] = useState(false);
 
-  useEffect(() => { callbacks.current = { onDelete, onChange, onEnter, onNudge, onTransform }; },
-    [onDelete, onChange, onEnter, onNudge, onTransform]);
+  useEffect(() => { callbacks.current = { onDelete, onChange, onEnter, onNudge, onTransform, onLeaveBlock }; },
+    [onDelete, onChange, onEnter, onNudge, onTransform, onLeaveBlock]);
 
   useEffect(() => {
     if (showTip && tooltipRef.current) {
@@ -165,7 +164,6 @@ export default function MathBlock({
     const mf = mathFieldRef.current;
     if (!mf) return;
 
-    // Fix: Only run the focus assignment once when the block mounts
     if (!hasInitialized.current) {
       if (initialValue && mf.getValue() === '') mf.setValue(initialValue);
       setTimeout(() => mf.focus(), 50);
@@ -189,9 +187,39 @@ export default function MathBlock({
       if (!mf.getValue()) {
         if (e.key === '"' || e.key === "'") { e.preventDefault(); isTransforming.current = true; callbacks.current.onTransform(id, 'text'); return; }
         if (e.key === '#') { e.preventDefault(); isTransforming.current = true; callbacks.current.onTransform(id, 'section'); return; }
+        
+        if (e.key.startsWith('Arrow')) {
+          e.preventDefault();
+          mf.blur();
+          callbacks.current.onDelete(id); 
+          callbacks.current.onLeaveBlock(id, e.key); 
+          return;
+        }
       }
-      if (e.key === 'Escape') { mf.blur(); return; }
-      if (e.key === 'Enter')  { e.preventDefault(); mf.blur(); callbacks.current.onEnter(id); return; }
+      
+      if (e.key === 'Escape') { 
+        e.preventDefault(); 
+        mf.blur(); 
+        callbacks.current.onLeaveBlock(id, 'Escape');
+        return; 
+      }
+      
+      // Shift+Enter push-down logic
+      if (e.key === 'Enter') { 
+        e.preventDefault(); 
+        mf.blur(); 
+        callbacks.current.onEnter(id, e.shiftKey); 
+        return; 
+      }
+      
+      // Tab navigation
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        mf.blur();
+        callbacks.current.onLeaveBlock(id, e.shiftKey ? 'ShiftTab' : 'Tab');
+        return;
+      }
+      
       if (e.key.startsWith('Arrow') && (e.ctrlKey || e.metaKey || !mf.getValue())) {
         e.preventDefault();
         const D = { ArrowUp:[0,-GRID_SIZE], ArrowDown:[0,GRID_SIZE], ArrowLeft:[-GRID_SIZE,0], ArrowRight:[GRID_SIZE,0] };

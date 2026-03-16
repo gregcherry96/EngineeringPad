@@ -2,10 +2,9 @@ import React, { useEffect, useRef } from 'react';
 
 const GRID_SIZE = 20;
 
-export default function TextBlock({ id, initialValue, setFocus, onDelete, onChange, onEnter, onNudge }) {
+export default function TextBlock({ id, initialValue, setFocus, onDelete, onChange, onEnter, onNudge, onLeaveBlock }) {
   const inputRef = useRef(null);
 
-  // Auto-resize the textarea to fit the content
   const adjustHeight = () => {
     const el = inputRef.current;
     if (el) {
@@ -17,7 +16,6 @@ export default function TextBlock({ id, initialValue, setFocus, onDelete, onChan
   useEffect(() => {
     if (inputRef.current) {
       inputRef.current.focus();
-      // Move cursor to the end of the text if it has an initial value
       inputRef.current.setSelectionRange(initialValue.length, initialValue.length);
       adjustHeight();
     }
@@ -30,17 +28,35 @@ export default function TextBlock({ id, initialValue, setFocus, onDelete, onChan
 
   const handleKeyDown = (e) => {
     if (e.key === 'Escape') {
+      e.preventDefault();
       inputRef.current?.blur();
+      onLeaveBlock(id, 'Escape');
       return;
     }
-    // Shift+Enter creates a new line, but regular Enter creates a new MathBlock below
+    
+    // Tab navigation
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      inputRef.current?.blur();
+      onLeaveBlock(id, e.shiftKey ? 'ShiftTab' : 'Tab');
+      return;
+    }
+    
+    if (e.key.startsWith('Arrow') && !inputRef.current.value) {
+      e.preventDefault();
+      inputRef.current?.blur();
+      onDelete(id);
+      onLeaveBlock(id, e.key);
+      return;
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       inputRef.current?.blur();
-      onEnter(id);
+      onEnter(id, false);
       return;
     }
-    // Nudging with arrow keys (Ctrl + Arrow)
+
     if (e.key.startsWith('Arrow') && (e.ctrlKey || e.metaKey || !inputRef.current.value)) {
       e.preventDefault();
       const D = { ArrowUp: [0, -GRID_SIZE], ArrowDown: [0, GRID_SIZE], ArrowLeft: [-GRID_SIZE, 0], ArrowRight: [GRID_SIZE, 0] };
@@ -52,7 +68,7 @@ export default function TextBlock({ id, initialValue, setFocus, onDelete, onChan
   const handleBlur = () => {
     setFocus(false);
     if (!inputRef.current?.value.trim()) {
-      onDelete(id); // Delete if left totally empty
+      onDelete(id); 
     }
   };
 

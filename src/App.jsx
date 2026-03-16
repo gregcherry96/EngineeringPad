@@ -11,12 +11,18 @@ const MAX_ZOOM  = 3.0;
 const ZOOM_STEP = 0.12;
 const UNDO_LIMIT = 60;
 
+// ─── Utility helpers ──────────────────────────────────────────────────────────
 const snap = (val, zoom = 1) => Math.round(val / (GRID_SIZE * zoom)) * GRID_SIZE;
-
 let nextId = 1;
 const makeBlock = (x, y, type = 'math') => ({ id: nextId++, x, y, type, expression: '' });
 
-// ─── Utility helpers ──────────────────────────────────────────────────────────
+// Helper to find if a block assigns a variable (e.g. "m =" or "m :=")
+const getAssignedVar = (expr) => {
+  if (!expr) return null;
+  const match = expr.match(/^\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*(:=|=)/);
+  return match ? match[1] : null;
+};
+
 const SUP = {'-':'⁻','0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹'};
 const toSup = n => String(n).split('').map(c => SUP[c] ?? c).join('');
 
@@ -27,9 +33,6 @@ function debounce(func, wait) {
     timeout = setTimeout(() => func.apply(this, args), wait);
   };
 }
-
-// ─── Number formatter & Unit builder (Omitted for brevity, keep existing functions) ───
-// KEEP YOUR EXISTING formatNum, buildUnitStr, DIM_TO_UNIT, simplifyAndFormat, convertResult, formatMathResult, classifyError
 
 export function convertResult(rawResult, targetUnit) {
   if (!rawResult?.isUnit) throw new Error('Not a unit quantity');
@@ -128,7 +131,6 @@ function classifyError(err) {
   return { label: 'error', msg };
 }
 
-// ─── App ──────────────────────────────────────────────────────────────────────
 export default function App() {
   const [blocks, setBlocks]               = useState([]);
   const [results, setResults]             = useState({});
@@ -136,11 +138,10 @@ export default function App() {
   const [userVars, setUserVars]           = useState({});
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [selectedId, setSelectedId]       = useState(null);
-
-  // ── Canvas transform ──────────────────────────────────────────────────────
+  const [cursorPos, setCursorPos]         = useState(null); 
   const [zoom, setZoom] = useState(1);
+  const [isLoaded, setIsLoaded]           = useState(false);
 
-  // ── Undo history ──────────────────────────────────────────────────────────
   const undoStack = useRef([]);
   const redoStack = useRef([]);
 
@@ -154,20 +155,49 @@ export default function App() {
     redoStack.current = [];
   }, []);
 
-  // ── Refs ──────────────────────────────────────────────────────────────────
-  const rawResultsRef    = useRef({});
+  const rawResultsRef      = useRef({});
   const activeMathFieldRef = useRef(null);
   const graphPaperRef      = useRef(null);
-  const panOriginRef       = useRef(null); // Adjusted for native scrolling
+  const panOriginRef       = useRef(null); 
   const isPanning          = useRef(false);
   const spaceHeld          = useRef(false);
 
-  // ── Evaluate (Immediate & Debounced) ──────────────────────────────────────
+  // ── Auto-Load/Save LocalStorage ───────────────────────────────────────────
+  useEffect(() => {
+    try {
+      const savedData = localStorage.getItem('mathpad-session');
+      if (savedData) {
+        const { savedBlocks, savedOverrides } = JSON.parse(savedData);
+        if (savedBlocks && Array.isArray(savedBlocks)) {
+          setBlocks(savedBlocks);
+          setUnitOverrides(savedOverrides || {});
+          
+          const maxId = Math.max(0, ...savedBlocks.map(b => b.id));
+          nextId = maxId + 1;
+
+          evaluateAllImmediate(savedBlocks, savedOverrides || {});
+        }
+      }
+    } catch (e) {
+      console.warn("Could not load saved session", e);
+    }
+    setIsLoaded(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!isLoaded) return;
+    localStorage.setItem('mathpad-session', JSON.stringify({ 
+      savedBlocks: blocks, 
+      savedOverrides: unitOverrides 
+    }));
+  }, [blocks, unitOverrides, isLoaded]);
+
+  // ── Evaluate ──────────────────────────────────────────────────────────────
   const evaluateAllImmediate = useCallback((updatedBlocks, currentOverrides) => {
     const sortedBlocks = [...updatedBlocks].sort((a, b) => {
-      const yDiff = a.y - b.y;
-      if (Math.abs(yDiff) < 15) return a.x - b.x;
-      return yDiff;
+      if (Math.abs(a.y - b.y) < GRID_SIZE) return a.x - b.x;
+      return a.y - b.y;
     });
 
     const scope      = { ...MATH_SCOPE };
@@ -245,7 +275,6 @@ export default function App() {
   // ── Block handlers ────────────────────────────────────────────────────────
   const canvasToWorld = useCallback((clientX, clientY) => {
     const rect = graphPaperRef.current.getBoundingClientRect();
-    // Factor in the native scrollbar positions
     const scrollX = graphPaperRef.current.scrollLeft;
     const scrollY = graphPaperRef.current.scrollTop;
 
@@ -256,17 +285,19 @@ export default function App() {
 
   const handleCanvasClick = useCallback((e) => {
     if (isPanning.current) return;
-    if (e.target.closest('.block-container') || e.target.closest('.sidebar')) return;
+    if (e.target.closest('.block-container') || e.target.closest('.sidebar') || e.target.closest('.toolbar')) return;
+    
+    if (selectedId) {
+      const activeBlock = blocks.find(b => b.id === selectedId);
+      if (activeBlock && !activeBlock.expression.trim()) {
+        handleDelete(selectedId);
+      }
+    }
+
     setSelectedId(null);
     const { x, y } = canvasToWorld(e.clientX, e.clientY);
-    const newBlock = makeBlock(x, y, 'math');
-    setBlocks(prev => {
-      const updated = [...prev, newBlock];
-      pushUndo(prev);
-      evaluateAllImmediate(updated, unitOverrides);
-      return updated;
-    });
-  }, [canvasToWorld, evaluateAllImmediate, unitOverrides, pushUndo]);
+    setCursorPos({ x, y }); 
+  }, [canvasToWorld, blocks, selectedId]);
 
   const handleChange = useCallback((id, expression) => {
     setBlocks(prev => {
@@ -295,17 +326,32 @@ export default function App() {
     setResults(p  => { const n = { ...p }; delete n[id]; return n; });
     setUnitOverrides(p => { const n = { ...p }; delete n[id]; return n; });
     delete rawResultsRef.current[id];
+    
     if (selectedId === id) setSelectedId(null);
   }, [evaluateAllImmediate, unitOverrides, pushUndo, selectedId]);
 
-  const handleEnter = useCallback((id) => {
-    setBlocks(prev => {
-      const cur = prev.find(b => b.id === id);
-      if (!cur) return prev;
-      const newBlock = makeBlock(cur.x, cur.y + 60, 'math');
-      return [...prev, newBlock];
-    });
-  }, []);
+  const handleEnter = useCallback((id, isShift = false) => {
+    const cur = blocks.find(b => b.id === id);
+    if (!cur) return;
+
+    // "Push Down" logic: If Shift+Enter, push everything below this block down by 4 grid spaces
+    if (isShift) {
+      setBlocks(prev => {
+        pushUndo(prev);
+        const updated = prev.map(b => {
+          if (b.y > cur.y || (b.y === cur.y && b.id !== id)) {
+            return { ...b, y: b.y + (GRID_SIZE * 4) };
+          }
+          return b;
+        });
+        evaluateAllDebounced(updated, unitOverrides);
+        return updated;
+      });
+    }
+
+    setCursorPos({ x: cur.x, y: cur.y + (isShift ? GRID_SIZE * 4 : 60) });
+    setSelectedId(null); 
+  }, [blocks, pushUndo, evaluateAllDebounced, unitOverrides]);
 
   const handleNudge = useCallback((id, dx, dy) => {
     setBlocks(prev => {
@@ -331,6 +377,177 @@ export default function App() {
     mf.focus();
   }, []);
 
+  const handleLeaveBlock = useCallback((id, triggerKey) => {
+    const sortedBlocks = [...blocks].sort((a, b) => Math.abs(a.y - b.y) < GRID_SIZE ? a.x - b.x : a.y - b.y);
+    const curIdx = sortedBlocks.findIndex(b => b.id === id);
+    const cur = sortedBlocks[curIdx];
+    if (!cur) return;
+  
+    // Tab Navigation
+    if (triggerKey === 'Tab' || triggerKey === 'ShiftTab') {
+      const nextIdx = triggerKey === 'Tab' ? curIdx + 1 : curIdx - 1;
+      if (nextIdx >= 0 && nextIdx < sortedBlocks.length) {
+        setSelectedId(sortedBlocks[nextIdx].id);
+        setCursorPos(null);
+      } else {
+        // If end of document, drop cursor at bottom
+        setCursorPos({ x: cur.x, y: cur.y + 60 });
+        setSelectedId(null);
+      }
+      return;
+    }
+
+    let nx = cur.x;
+    let ny = cur.y;
+    const step = GRID_SIZE;
+  
+    if (triggerKey === 'ArrowUp') ny -= step;
+    else if (triggerKey === 'ArrowDown') ny += step * 3; 
+    else if (triggerKey === 'ArrowLeft') nx -= step;
+    else if (triggerKey === 'ArrowRight') {
+      const el = document.getElementById(`block-container-${id}`);
+      if (el) {
+        nx += Math.ceil((el.getBoundingClientRect().width / zoom) / GRID_SIZE) * GRID_SIZE + step;
+      } else {
+        nx += step * 5; 
+      }
+    }
+  
+    setCursorPos({ x: nx, y: ny });
+    setSelectedId(null);
+  }, [blocks, zoom]);
+
+  // Drag and Drop variables onto canvas
+  const handleDrop = useCallback((e) => {
+    e.preventDefault();
+    const varName = e.dataTransfer.getData('application/mathpad-var');
+    if (varName) {
+      const { x, y } = canvasToWorld(e.clientX, e.clientY);
+      const newBlock = makeBlock(x, y, 'math');
+      newBlock.expression = varName;
+      
+      setBlocks(prev => {
+        const updated = [...prev, newBlock];
+        pushUndo(prev);
+        return updated;
+      });
+      setSelectedId(newBlock.id);
+    }
+  }, [canvasToWorld, pushUndo]);
+
+  const handleDragOver = useCallback((e) => {
+    e.preventDefault(); 
+    e.dataTransfer.dropEffect = 'copy';
+  }, []);
+
+  // ── Global Keyboard Shortcuts & Dynamic Collision Detection ───────────────
+  useEffect(() => {
+    const handleGlobalKeyDown = (e) => {
+      if (e.target.closest('input, textarea, math-field')) return;
+
+      // Block Duplication (Ctrl+D)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
+        if (selectedId) {
+          e.preventDefault();
+          const sourceBlock = blocks.find(b => b.id === selectedId);
+          if (sourceBlock) {
+             const newBlock = makeBlock(sourceBlock.x + GRID_SIZE, sourceBlock.y + GRID_SIZE*2, sourceBlock.type);
+             newBlock.expression = sourceBlock.expression;
+             
+             setBlocks(prev => {
+               const updated = [...prev, newBlock];
+               pushUndo(prev);
+               return updated;
+             });
+             
+             setSelectedId(newBlock.id);
+             setCursorPos(null);
+          }
+        }
+        return;
+      }
+
+      if (e.key === '/') {
+        e.preventDefault();
+        setSidebarCollapsed(false);
+        setTimeout(() => document.querySelector('.sidebar-search')?.focus(), 50);
+        return;
+      }
+
+      if (cursorPos) {
+        if (e.key.startsWith('Arrow')) {
+          e.preventDefault();
+          const step = GRID_SIZE;
+          let nx = cursorPos.x;
+          let ny = cursorPos.y;
+
+          if (e.key === 'ArrowUp') ny = Math.max(0, ny - step);
+          if (e.key === 'ArrowDown') ny += step;
+          if (e.key === 'ArrowLeft') nx = Math.max(0, nx - step);
+          if (e.key === 'ArrowRight') nx += step;
+
+          const graphRect = graphPaperRef.current?.getBoundingClientRect();
+          const scrollX = graphPaperRef.current?.scrollLeft || 0;
+          const scrollY = graphPaperRef.current?.scrollTop || 0;
+
+          if (graphRect) {
+            const hitBlock = blocks.find(b => {
+              const el = document.getElementById(`block-container-${b.id}`);
+              if (!el) return false;
+              const rect = el.getBoundingClientRect();
+              
+              const elWorldX = (rect.left - graphRect.left + scrollX) / zoom;
+              const elWorldY = (rect.top - graphRect.top + scrollY) / zoom;
+              const elWorldW = rect.width / zoom;
+              const elWorldH = rect.height / zoom;
+
+              return nx >= elWorldX - 10 && nx <= elWorldX + elWorldW + 10 &&
+                     ny >= elWorldY - 10 && ny <= elWorldY + elWorldH + 10;
+            });
+
+            if (hitBlock) {
+              setSelectedId(hitBlock.id);
+              setCursorPos(null); 
+            } else {
+              setCursorPos({ x: nx, y: ny });
+            }
+          }
+          return;
+        }
+
+        if (e.key === 'Escape') {
+          setCursorPos(null);
+          return;
+        }
+
+        if (e.key.length === 1 || e.key === 'Enter') {
+          e.preventDefault();
+          
+          let type = 'math';
+          let initialExpr = e.key.length === 1 ? e.key : '';
+
+          if (e.key === '"' || e.key === "'") { type = 'text'; initialExpr = ''; }
+          else if (e.key === '#') { type = 'section'; initialExpr = ''; }
+
+          const newBlock = makeBlock(cursorPos.x, cursorPos.y, type);
+          newBlock.expression = initialExpr;
+
+          setBlocks(prev => {
+            const updated = [...prev, newBlock];
+            pushUndo(prev);
+            return updated;
+          });
+          
+          setSelectedId(newBlock.id);
+          setCursorPos(null);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [cursorPos, pushUndo, blocks, zoom, selectedId]);
+
   // ── Undo / Redo ───────────────────────────────────────────────────────────
   const handleUndo = useCallback(() => {
     if (!undoStack.current.length) return;
@@ -348,7 +565,7 @@ export default function App() {
     evaluateAllImmediate(next, unitOverrides);
   }, [blocks, evaluateAllImmediate, unitOverrides]);
 
-  // ── Zoom (Updating scroll positions instead of CSS translations) ──────────
+  // ── Zoom (Native scrolling) ───────────────────────────────────────────────
   const handleWheel = useCallback((e) => {
     if (!e.ctrlKey && !e.metaKey) return;
     e.preventDefault();
@@ -361,7 +578,6 @@ export default function App() {
       const newZ = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z + delta));
       const scale = newZ / z;
 
-      // Keep the cursor positioned over the same spot while zooming natively
       if (graphPaperRef.current) {
         const scrollX = graphPaperRef.current.scrollLeft;
         const scrollY = graphPaperRef.current.scrollTop;
@@ -418,7 +634,6 @@ export default function App() {
     const dx = e.clientX - panOriginRef.current.clientX;
     const dy = e.clientY - panOriginRef.current.clientY;
 
-    // Instead of altering a `pan` state, directly scrub the container's native scroll
     if (graphPaperRef.current) {
       graphPaperRef.current.scrollLeft = panOriginRef.current.scrollLeft - dx;
       graphPaperRef.current.scrollTop = panOriginRef.current.scrollTop - dy;
@@ -439,11 +654,9 @@ export default function App() {
     return () => el.removeEventListener('wheel', handleWheel);
   }, [handleWheel]);
 
-  // ─── Dynamic Canvas Bounds Calculation ─────────────────────────────────────
-  const maxCanvasWidth = Math.max(2000, ...blocks.map(b => b.x + 800));
-  const maxCanvasHeight = Math.max(2000, ...blocks.map(b => b.y + 800));
+  const maxCanvasWidth = Math.max(2000, ...blocks.map(b => b.x + 800), cursorPos ? cursorPos.x + 800 : 0);
+  const maxCanvasHeight = Math.max(2000, ...blocks.map(b => b.y + 800), cursorPos ? cursorPos.y + 800 : 0);
 
-  // ─── Render ────────────────────────────────────────────────────────────────
   const canUndo = undoStack.current.length > 0;
   const canRedo = redoStack.current.length > 0;
 
@@ -453,35 +666,45 @@ export default function App() {
       <div className="toolbar">
         <span className="toolbar-brand">MathPad</span>
         <span className="toolbar-divider" />
-        <span className="toolbar-hint">Click to create</span>
+        <span className="toolbar-hint">Click to place cursor</span>
         <span className="toolbar-divider" />
-        <span className="toolbar-hint"><kbd>"</kbd> text block</span>
+        <span className="toolbar-hint"><kbd>Shift+Enter</kbd> push down</span>
         <span className="toolbar-divider" />
-        <span className="toolbar-hint"><kbd>#</kbd> heading</span>
+        <span className="toolbar-hint"><kbd>Tab</kbd> next block</span>
         <span className="toolbar-divider" />
-        <span className="toolbar-hint"><kbd>Space</kbd>+drag to pan</span>
-        <span className="toolbar-divider" />
-        <span className="toolbar-hint"><kbd>Ctrl</kbd>+scroll to zoom</span>
+        <span className="toolbar-hint"><kbd>Ctrl+D</kbd> duplicate</span>
 
         <span style={{ flex: 1 }} />
 
-        {/* Undo/Redo */}
         <button className={`toolbar-btn${canUndo ? '' : ' disabled'}`} onClick={handleUndo} title="Undo (Ctrl+Z)">↩</button>
         <button className={`toolbar-btn${canRedo ? '' : ' disabled'}`} onClick={handleRedo} title="Redo (Ctrl+Y)">↪</button>
+        
+        <button 
+          className="toolbar-btn" 
+          onClick={() => {
+            if (window.confirm('Clear the entire workspace?')) {
+              pushUndo(blocks);
+              setBlocks([]);
+              setResults({});
+              setUnitOverrides({});
+              setUserVars({});
+              setSelectedId(null);
+              setCursorPos(null);
+              localStorage.removeItem('mathpad-session');
+            }
+          }} 
+          title="Clear Workspace"
+        >
+          🗑️
+        </button>
 
         <span className="toolbar-divider" />
 
-        {/* Zoom controls */}
         <button className="toolbar-btn" onClick={zoomOut} title="Zoom out">−</button>
         <span className="toolbar-zoom-label" onClick={zoomReset} title="Reset zoom">
           {Math.round(zoom * 100)}%
         </span>
         <button className="toolbar-btn" onClick={zoomIn}  title="Zoom in">+</button>
-
-        <span className="toolbar-divider" />
-        <span className="toolbar-block-count">
-          {blocks.length > 0 ? `${blocks.length} block${blocks.length !== 1 ? 's' : ''}` : ''}
-        </span>
       </div>
 
       <div className="below-toolbar">
@@ -500,62 +723,79 @@ export default function App() {
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
+          onDrop={handleDrop}
+          onDragOver={handleDragOver}
         >
-          {/* Empty state hint */}
-          {blocks.length === 0 && (
-            <div className="canvas-empty-hint">
-              <div className="canvas-empty-icon">f(x)</div>
-              <div className="canvas-empty-title">Click anywhere to start</div>
-              <div className="canvas-empty-sub">
-                Type an expression like <code>m := 10 kg</code> then<br/>
-                press <kbd>Enter</kbd> to create the next block
+          {blocks.length === 0 && !cursorPos && (
+            <div className="canvas-empty-state" style={{position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center', color: '#6a6560', pointerEvents: 'none'}}>
+              <h1 style={{fontFamily: 'Lora', color: '#1a1714', margin: '0 0 10px 0'}}>MathPad</h1>
+              <p style={{margin: '0 0 20px 0'}}>Click anywhere to place the cursor and start typing</p>
+              <div style={{display: 'flex', gap: '20px', justifyContent: 'center', fontSize: '13px'}}>
+                <span><code style={{background: '#e8e4db', padding: '4px 8px', borderRadius: '4px', fontFamily: '"JetBrains Mono", monospace'}}>m := 10 kg</code> Define variables</span>
+                <span><code style={{background: '#e8e4db', padding: '4px 8px', borderRadius: '4px', fontFamily: '"JetBrains Mono", monospace'}}>F = m * g</code> Calculate results</span>
               </div>
             </div>
           )}
 
-          {/* Canvas area scaled for zooming and sized for scrollbars */}
           <div
             className="canvas-area"
             style={{
               transform: `scale(${zoom})`,
               transformOrigin: '0 0',
-              // We multiply the CSS bounds by the zoom so the scrollbars extend properly
               minWidth: `${maxCanvasWidth * zoom}px`,
               minHeight: `${maxCanvasHeight * zoom}px`
             }}
           >
-            {blocks.map(block => {
-              const res = results[block.id] ?? {};
-              return (
-                <BlockWrapper
-                  key={block.id}
-                  block={block}
-                  numStr={res.numStr}
-                  unitStr={res.unitStr}
-                  hasError={!!res.error}
-                  errorLabel={res.errorLabel}
-                  errorMsg={res.errorMsg}
-                  hasUnitResult={!!rawResultsRef.current[block.id]}
-                  unitIsOverridden={!!unitOverrides[block.id]}
-                  isSelected={selectedId === block.id}
-                  activeMathFieldRef={activeMathFieldRef}
-                  onSelect={setSelectedId}
-                  onMove={handleMove}
-                  onDelete={handleDelete}
-                  onChange={handleChange}
-                  onEnter={handleEnter}
-                  onNudge={handleNudge}
-                  onTransform={handleTransform}
-                  onUnitChange={handleUnitChange}
-                  onUnitReset={handleUnitReset}
-                />
-              );
-            })}
+            {cursorPos && !selectedId && (
+              <div 
+                className="canvas-crosshair" 
+                style={{ left: cursorPos.x, top: cursorPos.y }}
+              />
+            )}
+
+            {(() => {
+              const activeBlock = blocks.find(b => b.id === selectedId);
+              const activeDeps = activeBlock && activeBlock.type === 'math' 
+                ? Object.keys(userVars).filter(v => activeBlock.expression.includes(v)) 
+                : [];
+
+              return blocks.map(block => {
+                const res = results[block.id] ?? {};
+                const definedVar = getAssignedVar(block.expression);
+                const isDependency = activeDeps.includes(definedVar);
+
+                return (
+                  <BlockWrapper
+                    key={block.id}
+                    block={block}
+                    numStr={res.numStr}
+                    unitStr={res.unitStr}
+                    hasError={!!res.error}
+                    errorLabel={res.errorLabel}
+                    errorMsg={res.errorMsg}
+                    hasUnitResult={!!rawResultsRef.current[block.id]}
+                    unitIsOverridden={!!unitOverrides[block.id]}
+                    isSelected={selectedId === block.id}
+                    isDependency={isDependency}
+                    activeMathFieldRef={activeMathFieldRef}
+                    onSelect={setSelectedId}
+                    onMove={handleMove}
+                    onDelete={handleDelete}
+                    onChange={handleChange}
+                    onEnter={handleEnter}
+                    onNudge={handleNudge}
+                    onTransform={handleTransform}
+                    onUnitChange={handleUnitChange}
+                    onUnitReset={handleUnitReset}
+                    onLeaveBlock={handleLeaveBlock}
+                  />
+                );
+              });
+            })()}
           </div>
         </div>
       </div>
 
-      {/* ── Status bar ── */}
       <div className="status-bar">
         <span className="status-item">
           {zoom !== 1 && `${Math.round(zoom * 100)}%`}
@@ -563,10 +803,6 @@ export default function App() {
         <span style={{ flex: 1 }} />
         <span className="status-item">
           {Object.keys(userVars).length > 0 && `${Object.keys(userVars).length} variable${Object.keys(userVars).length !== 1 ? 's' : ''} defined`}
-        </span>
-        <span className="status-sep" />
-        <span className="status-item">
-          MathPad — click unit labels to convert
         </span>
       </div>
     </div>

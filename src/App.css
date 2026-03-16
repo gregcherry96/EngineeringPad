@@ -101,27 +101,17 @@ body, html { margin: 0; padding: 0; overflow: hidden; font-family: 'Inter', sans
 /* ─── Graph paper ────────────────────────────────────────────────────────── */
 .graph-paper {
   flex: 1;
-  height: 100%;
-  /* Warm "buff" paper background */
   background-color: #fcfbf6;
-  background-image:
-    /* Heavy green left margin line */
-    linear-gradient(to right, #2a6857 2px, transparent 2px),
-    /* Major grid lines (every 100px) - slightly darker green/blue */
-    linear-gradient(to right,  #c1dfd4 1px, transparent 1px),
-    linear-gradient(to bottom, #c1dfd4 1px, transparent 1px),
-    /* Minor grid lines (every 20px) - very light green/blue */
-    linear-gradient(to right,  #e6f2ee 1px, transparent 1px),
-    linear-gradient(to bottom, #e6f2ee 1px, transparent 1px);
-
-  /* The first 100px controls the left margin line */
-  background-size: 100% 100%, 100px 100px, 100px 100px, 20px 20px, 20px 20px;
-  /* Shift the heavy margin line exactly 100px from the left */
-  background-position: 100px 0, 0 0, 0 0, 0 0, 0 0;
-  background-repeat: no-repeat, repeat, repeat, repeat, repeat;
-
   position: relative;
   overflow: auto;
+}
+
+.graph-paper.panning-mode {
+  cursor: grab !important;
+}
+.graph-paper.panning-active {
+  cursor: grabbing !important;
+  user-select: none;
 }
 
 /* ─── Custom Scrollbar Styling ───────────────────────────────────────────── */
@@ -409,6 +399,17 @@ body, html { margin: 0; padding: 0; overflow: hidden; font-family: 'Inter', sans
 }
 
 /* Type badge */
+.block-type-section::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 4px;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, #2a6857 0%, rgba(42, 104, 87, 0) 100%);
+  pointer-events: none;
+}
+
 .block-type-badge {
   position: absolute;
   top: -10px; left: 9px;
@@ -424,6 +425,48 @@ body, html { margin: 0; padding: 0; overflow: hidden; font-family: 'Inter', sans
   pointer-events: none; white-space: nowrap;
 }
 .math-wrapper.focused .block-type-badge { opacity: 1; }
+
+.ghost-block-hint {
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  color: #a8b3af;
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px dashed #c1dfd4;
+  padding: 6px 12px;
+  border-radius: 6px;
+  opacity: 0;
+  transform: translateY(-10px);
+  animation: fadeInGhost 0.3s forwards 0.5s; /* Delays appearance so it isn't annoying */
+}
+
+@keyframes fadeInGhost {
+  to {
+    opacity: 0.8;
+    transform: translateY(0);
+  }
+}
+
+.ghost-enter-icon {
+  font-family: 'JetBrains Mono', monospace;
+  background: #e6f2ee;
+  color: #2a6857;
+  padding: 2px 4px;
+  border-radius: 4px;
+  margin-right: 4px;
+}
+
+.math-wrapper.has-error {
+  background: #fffafa;
+  border-color: #e5a49a;
+  animation: errorShake 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+@keyframes errorShake {
+  10%, 90% { transform: translate3d(-1px, 0, 0); }
+  20%, 80% { transform: translate3d(2px, 0, 0); }
+  30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+  40%, 60% { transform: translate3d(4px, 0, 0); }
+}
 
 /* ─── MathLive ───────────────────────────────────────────────────────────── */
 math-field::part(menu-toggle),
@@ -664,15 +707,15 @@ math-field {
 .section-block-input {
   background: transparent;
   border: none;
-  border-bottom: 2px solid #2a6857; /* Matches the margin line */
   outline: none;
   font-family: 'Inter', sans-serif;
-  font-size: 22px;
-  font-weight: 600;
+  font-size: 24px;
+  font-weight: 700;
   color: #1a1714;
-  width: 500px;
-  padding: 8px 4px 4px 4px;
+  width: 600px; /* Wider for a better header feel */
+  padding: 12px 4px 8px 4px;
   margin-bottom: 8px;
+  position: relative;
 }
 
 .section-block-input::placeholder {
@@ -701,6 +744,23 @@ math-field {
 
 /* ─── 2. Focus Mode Dimming ──────────────────────────────────────────────── */
 /* When the canvas has an active block, slightly dim the inactive ones */
+.canvas-area {
+  position: relative;
+  min-width: 5000px;
+  min-height: 5000px;
+  background-image:
+    linear-gradient(to right, #2a6857 2px, transparent 2px),
+    linear-gradient(to right,  #c1dfd4 1px, transparent 1px),
+    linear-gradient(to bottom, #c1dfd4 1px, transparent 1px),
+    linear-gradient(to right,  #e6f2ee 1px, transparent 1px),
+    linear-gradient(to bottom, #e6f2ee 1px, transparent 1px);
+  background-size: 100% 100%, 100px 100px, 100px 100px, 20px 20px, 20px 20px;
+  background-position: 100px 0, 0 0, 0 0, 0 0, 0 0;
+  background-repeat: no-repeat, repeat, repeat, repeat, repeat;
+  /* Smooth transform for zooming */
+  transition: transform 0.1s cubic-bezier(0.2, 0, 0.2, 1);
+}
+
 .canvas-area:focus-within .block-container:not(:focus-within) {
   opacity: 0.6;
 }
@@ -777,4 +837,81 @@ math-field {
 }
 .block-actions-menu .drag-handle-new:active {
   cursor: grabbing;
+}
+
+/* --- Mathcad-style Global Cursor --- */
+.canvas-crosshair {
+  position: absolute;
+  width: 2px;
+  height: 20px;
+  background-color: #d93838; /* Mathcad Red */
+  z-index: 100;
+  pointer-events: none;
+  animation: cursorBlink 1.1s step-end infinite;
+}
+
+/* Horizontal top bar of the crosshair */
+.canvas-crosshair::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 10px;
+  height: 2px;
+  background-color: #d93838;
+}
+
+/* Horizontal bottom bar of the crosshair */
+.canvas-crosshair::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 10px;
+  height: 2px;
+  background-color: #d93838;
+}
+
+@keyframes cursorBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* --- True Paper Aesthetics --- */
+.math-wrapper {
+  background: transparent; /* Invisible by default */
+  backdrop-filter: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  box-shadow: none;
+  transition: all 0.15s ease;
+}
+
+/* Show a faint box only when hovered */
+.math-wrapper:hover {
+  background: rgba(255, 255, 255, 0.6);
+  border-color: rgba(224, 219, 210, 0.8);
+}
+
+/* Pop out when actively typing */
+.math-wrapper.focused {
+  background: #ffffff;
+  border-color: #174a9e;
+  box-shadow: 0 4px 15px rgba(23, 74, 158, 0.12);
+}
+
+/* --- Dependency Highlighting --- */
+.math-wrapper.is-dependency {
+  background: rgba(42, 104, 87, 0.08); /* Soft green glow */
+  border: 1px dashed rgba(42, 104, 87, 0.4);
+}
+.math-wrapper.is-dependency::before {
+  content: '↳ source';
+  position: absolute;
+  top: -18px;
+  right: 4px;
+  font-size: 10px;
+  color: #2a6857;
+  font-family: 'Inter', sans-serif;
+  opacity: 0.7;
 }
