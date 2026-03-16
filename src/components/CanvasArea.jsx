@@ -1,8 +1,8 @@
 import React, { useState, useRef } from 'react';
 import { useWorkspaceData, useWorkspaceInteraction } from '../WorkspaceContext';
 import BlockWrapper from './BlockWrapper';
-
-const GRID_SIZE = 20;
+import { GRID_SIZE, PAPER_SIZES } from '../utils/canvasConfig';
+import { calculateWorldCoordinates, calculateMarqueeBounds } from '../utils/canvasUtils';
 
 export default function CanvasArea({
   zoom, startPan, pan, stopPan, isPanning, spaceHeld, graphPaperRef,
@@ -14,11 +14,7 @@ export default function CanvasArea({
   const canvasRef = useRef(null);
 
   const canvasToWorld = (clientX, clientY) => {
-    if (!canvasRef.current) return { x: 0, y: 0 };
-    const rect = canvasRef.current.getBoundingClientRect();
-    const wx = (clientX - rect.left) / zoom;
-    const wy = (clientY - rect.top) / zoom;
-    return { x: Math.round(wx / GRID_SIZE) * GRID_SIZE, y: Math.round(wy / GRID_SIZE) * GRID_SIZE };
+    return calculateWorldCoordinates(clientX, clientY, canvasRef.current?.getBoundingClientRect(), zoom, GRID_SIZE);
   };
 
   const handleMouseDown = (e) => {
@@ -39,13 +35,10 @@ export default function CanvasArea({
       const { x, y } = canvasToWorld(e.clientX, e.clientY);
       setMarquee(prev => ({ ...prev, endX: x, endY: y }));
 
-      const minX = Math.min(marquee.startX, x);
-      const maxX = Math.max(marquee.startX, x);
-      const minY = Math.min(marquee.startY, y);
-      const maxY = Math.max(marquee.startY, y);
+      const bounds = calculateMarqueeBounds({ ...marquee, endX: x, endY: y });
 
       const newlySelected = blocks.filter(b =>
-        b.x < maxX && b.x + 100 > minX && b.y < maxY && b.y + 40 > minY
+        b.x < bounds.maxX && b.x + 100 > bounds.minX && b.y < bounds.maxY && b.y + 40 > bounds.minY
       ).map(b => b.id);
 
       actions.select(newlySelected);
@@ -55,10 +48,9 @@ export default function CanvasArea({
   const handleMouseUp = (e) => {
     if (isPanning.current) stopPan();
     if (marquee) {
-      const dx = Math.abs(marquee.startX - marquee.endX);
-      const dy = Math.abs(marquee.startY - marquee.endY);
+      const bounds = calculateMarqueeBounds(marquee);
 
-      if (dx < 5 && dy < 5) {
+      if (bounds.dx < 5 && bounds.dy < 5) {
         const { x, y } = canvasToWorld(e.clientX, e.clientY);
         actions.setCursorPos({ x, y });
         const hasEmpty = blocks.some(b => !b.expression.trim());
@@ -71,16 +63,20 @@ export default function CanvasArea({
   const maxW = Math.max(2000, ...blocks.map(b => b.x + 800), cursorPos ? cursorPos.x + 800 : 0);
   const maxH = Math.max(2000, ...blocks.map(b => b.y + 800), cursorPos ? cursorPos.y + 800 : 0);
 
+  const a4 = PAPER_SIZES.A4;
+
   const canvasContent = (
     <>
       {cursorPos && selectedIds.length === 0 && <div className="canvas-crosshair" style={{ left: cursorPos.x, top: cursorPos.y }} />}
-      {marquee && (
-        <div style={{
-          position: 'absolute', left: Math.min(marquee.startX, marquee.endX), top: Math.min(marquee.startY, marquee.endY),
-          width: Math.abs(marquee.startX - marquee.endX), height: Math.abs(marquee.startY - marquee.endY),
-          backgroundColor: 'rgba(13, 110, 253, 0.1)', border: '1px solid rgba(13, 110, 253, 0.5)', pointerEvents: 'none', zIndex: 100
-        }} />
-      )}
+      {marquee && (() => {
+        const bounds = calculateMarqueeBounds(marquee);
+        return (
+          <div className="canvas-marquee" style={{
+            left: bounds.minX, top: bounds.minY,
+            width: bounds.width, height: bounds.height
+          }} />
+        );
+      })()}
       {blocks.map(block => <BlockWrapper key={block.id} block={block} />)}
     </>
   );
@@ -88,15 +84,15 @@ export default function CanvasArea({
   return (
     <div
       ref={graphPaperRef}
-      className={`graph-paper flex-grow-1 ${paperMode ? 'paper-mode-backdrop' : 'infinite-canvas-bg'} ${!paperMode && showGrid ? 'grid-bg' : ''}`}
+className={`graph-paper flex-grow-1 ${paperMode ? 'paper-mode-backdrop' : 'infinite-canvas-bg'} ${!paperMode && showGrid ? 'grid-bg' : ''} ${marquee ? 'is-selecting' : ''}`}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
     >
       {paperMode ? (
-        <div className="d-flex justify-content-center" style={{ minWidth: `${794 * zoom + 80}px`, minHeight: `${1123 * pageCount * zoom + 80}px`, padding: '40px' }}>
-          <div ref={canvasRef} className={`canvas-area a4-paper shadow ${showGrid ? 'grid-bg' : ''}`} style={{ transform: `scale(${zoom})`, width: '794px', height: `${1123 * pageCount}px`, flexShrink: 0 }}>
+        <div className="d-flex justify-content-center" style={{ minWidth: `${a4.width * zoom + 80}px`, minHeight: `${a4.height * pageCount * zoom + 80}px`, padding: '40px' }}>
+          <div ref={canvasRef} className={`canvas-area a4-paper shadow ${showGrid ? 'grid-bg' : ''}`} style={{ transform: `scale(${zoom})`, width: `${a4.width}px`, height: `${a4.height * pageCount}px`, flexShrink: 0 }}>
             {canvasContent}
           </div>
         </div>

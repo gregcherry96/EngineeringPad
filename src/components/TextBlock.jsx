@@ -1,10 +1,10 @@
 import React, { useEffect, useRef } from 'react';
-import { useWorkspace } from '../WorkspaceContext';
+import { useWorkspaceData } from '../WorkspaceContext';
 
 const GRID_SIZE = 20;
 
 export default function TextBlock({ id, initialValue, setFocus }) {
-  const { actions } = useWorkspace();
+  const { actions } = useWorkspaceData();
   const inputRef = useRef(null);
 
   const adjustHeight = () => {

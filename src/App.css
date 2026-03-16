@@ -144,3 +144,29 @@ math-field { color: #1a1714; background: transparent; min-width: 30px; min-heigh
     linear-gradient(to bottom, transparent 1121px, #94a3b8 1121px, #cbd5e1 1123px);
   background-size: 100% 1123px;
 }
+
+.canvas-marquee {
+  position: absolute;
+  background-color: rgba(13, 110, 253, 0.1);
+  border: 1px solid rgba(13, 110, 253, 0.5);
+  pointer-events: none;
+  z-index: 100;
+}
+
+.is-selecting, .is-selecting * {
+  -webkit-user-select: none !important;
+  user-select: none !important;
+}
+
+/* Apply the cursor globally to the main canvas wrapper */
+.graph-paper {
+  cursor: default; /* Use 'crosshair' if you prefer a drawing-style cursor */
+}
+
+/* Keep the selection overrides we added earlier */
+.is-selecting, .is-selecting * {
+  -webkit-user-select: none !important;
+  user-select: none !important;
+  cursor: crosshair !important;
+}
+

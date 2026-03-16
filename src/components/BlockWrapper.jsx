@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Rnd } from 'react-rnd';
-import { useWorkspace } from '../WorkspaceContext';
+import { useWorkspaceData } from '../WorkspaceContext';
 import MathBlock from './MathBlock';
 import TextBlock from './TextBlock';
 import SectionBlock from './SectionBlock';
@@ -8,7 +8,7 @@ import SectionBlock from './SectionBlock';
 const GRID_SIZE = 20;
 
 export default function BlockWrapper({ block }) {
-  const { results, selectedIds, activeDrag, actions } = useWorkspace();
+  const { results, selectedIds, activeDrag, actions } = ();
   const [isFocused, setIsFocused] = useState(false);
 
   // Track mouse start position to differentiate between a click and a drag
