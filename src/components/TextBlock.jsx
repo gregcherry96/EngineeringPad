@@ -1,15 +1,16 @@
 import React, { useEffect, useRef } from 'react';
+import { useWorkspace } from '../WorkspaceContext';
 
 const GRID_SIZE = 20;
 
-export default function TextBlock({ id, initialValue, setFocus, onDelete, onChange, onEnter, onNudge, onLeaveBlock }) {
+export default function TextBlock({ id, initialValue, setFocus }) {
+  const { actions } = useWorkspace();
   const inputRef = useRef(null);
 
   const adjustHeight = () => {
-    const el = inputRef.current;
-    if (el) {
-      el.style.height = 'auto';
-      el.style.height = `${el.scrollHeight}px`;
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto';
+      inputRef.current.style.height = `${inputRef.current.scrollHeight}px`;
     }
   };
 
@@ -21,66 +22,32 @@ export default function TextBlock({ id, initialValue, setFocus, onDelete, onChan
     }
   }, [initialValue.length]);
 
-  const handleChange = (e) => {
-    adjustHeight();
-    onChange(id, e.target.value);
-  };
-
   const handleKeyDown = (e) => {
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      inputRef.current?.blur();
-      onLeaveBlock(id, 'Escape');
-      return;
-    }
-    
-    // Tab navigation
-    if (e.key === 'Tab') {
-      e.preventDefault();
-      inputRef.current?.blur();
-      onLeaveBlock(id, e.shiftKey ? 'ShiftTab' : 'Tab');
-      return;
-    }
-    
-    if (e.key.startsWith('Arrow') && !inputRef.current.value) {
-      e.preventDefault();
-      inputRef.current?.blur();
-      onDelete(id);
-      onLeaveBlock(id, e.key);
-      return;
-    }
+    if (e.key === 'Escape') { e.preventDefault(); inputRef.current?.blur(); actions.leaveBlock(id, 'Escape'); return; }
+    if (e.key === 'Tab') { e.preventDefault(); inputRef.current?.blur(); actions.leaveBlock(id, e.shiftKey ? 'ShiftTab' : 'Tab'); return; }
+    if (e.key.startsWith('Arrow') && !inputRef.current.value) { e.preventDefault(); inputRef.current?.blur(); actions.delete(id); actions.leaveBlock(id, e.key); return; }
 
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      inputRef.current?.blur();
-      onEnter(id, false);
-      return;
-    }
+    // Enter (without shift) drops focus below block
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); inputRef.current?.blur(); actions.enter(id); return; }
 
+    // Nudge
     if (e.key.startsWith('Arrow') && (e.ctrlKey || e.metaKey || !inputRef.current.value)) {
       e.preventDefault();
       const D = { ArrowUp: [0, -GRID_SIZE], ArrowDown: [0, GRID_SIZE], ArrowLeft: [-GRID_SIZE, 0], ArrowRight: [GRID_SIZE, 0] };
-      const [dx, dy] = D[e.key] ?? [0, 0];
-      onNudge(id, dx, dy);
-    }
-  };
-
-  const handleBlur = () => {
-    setFocus(false);
-    if (!inputRef.current?.value.trim()) {
-      onDelete(id); 
+      actions.nudge(id, ...(D[e.key] ?? [0, 0]));
     }
   };
 
   return (
     <textarea
       ref={inputRef}
-      className="text-block-input"
+      className="form-control border-0 bg-transparent text-dark p-0 shadow-none m-0"
+      style={{ width: '400px', resize: 'none', fontFamily: 'Lora, serif', fontSize: '1rem', lineHeight: '1.5', overflow: 'hidden' }}
       value={initialValue}
-      onChange={handleChange}
+      onChange={e => { adjustHeight(); actions.change(id, e.target.value); }}
       onKeyDown={handleKeyDown}
       onFocus={() => setFocus(true)}
-      onBlur={handleBlur}
+      onBlur={() => { setFocus(false); if (!inputRef.current?.value.trim()) actions.delete(id); }}
       placeholder="Type your notes here... (Shift+Enter for new line)"
       rows={1}
       spellCheck={false}

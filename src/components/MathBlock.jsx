@@ -1,278 +1,118 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import 'mathlive';
-import { sanitizeMath, sanitizeMathDebug } from './sanitizeMath';
+import { sanitizeMath } from './sanitizeMath';
+import { useWorkspace } from '../WorkspaceContext';
 
 const GRID_SIZE = 20;
 
-const UNIT_SUGGESTIONS = [
-  'N','kN','MN','kg','g','mg','lb','lbf','ton',
-  'J','kJ','MJ','W','kW','MW','eV','cal','kcal','kWh','BTU',
-  'Pa','kPa','MPa','GPa','bar','mbar','atm','psi','mmHg',
-  'm','km','cm','mm','um','nm','ft','in','mi','yd',
-  's','ms','us','ns','min','h','hr','day',
-  'm/s','km/h','mph','kn',
-  'K','degC','degF',
-  'V','mV','kV','A','mA','kA','ohm','kohm','Mohm','F','uF','nF','pF','H','mH','uH',
-  'Hz','kHz','MHz','GHz',
-  'rad','deg',
-  'm^2','cm^2','km^2','m^3','cm^3','L','mL',
-  'mol','cd','lm','lx',
-];
-
-function UnitAutocomplete({ draft, onSelect }) {
-  if (!draft.trim()) return null;
-  const q = draft.toLowerCase();
-  const matches = UNIT_SUGGESTIONS.filter(u => u.toLowerCase().startsWith(q) && u.toLowerCase() !== q).slice(0, 6);
-  if (!matches.length) return null;
-  return (
-    <div className="unit-autocomplete">
-      {matches.map(u => (
-        <button key={u} className="unit-autocomplete-item" onMouseDown={e => { e.preventDefault(); onSelect(u); }}>
-          {u}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function UnitEditor({ id, unitStr, unitIsOverridden, hasUnitResult, onUnitChange, onUnitReset }) {
-  const [editing, setEditing]   = useState(false);
-  const [draft, setDraft]       = useState('');
-  const [flashErr, setFlashErr] = useState(false);
+function UnitEditor({ id, unitStr }) {
+  const { rawResultsRef, unitOverrides, actions } = useWorkspace();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
   const inputRef = useRef(null);
 
-  const startEdit = useCallback(e => {
-    e.stopPropagation();
-    setDraft(unitStr ?? '');
-    setEditing(true);
-    setTimeout(() => inputRef.current?.select(), 10);
-  }, [unitStr]);
-
-  const commit = useCallback(() => {
+  const commit = () => {
     const target = draft.trim();
-    if (!target || (target === unitStr && !unitIsOverridden)) { setEditing(false); return; }
-    const res = onUnitChange(id, target);
-    if (res?.ok === false) {
-      setFlashErr(true);
-      setTimeout(() => setFlashErr(false), 1200);
-    } else {
-      setEditing(false);
-    }
-  }, [draft, id, unitStr, unitIsOverridden, onUnitChange]);
+    if (target !== unitStr) actions.unitChange(id, target);
+    setEditing(false);
+  };
 
-  const handleKey = useCallback(e => {
-    e.stopPropagation();
-    if (e.key === 'Enter')  { e.preventDefault(); commit(); }
-    if (e.key === 'Escape') { setEditing(false); }
-  }, [commit]);
-
-  if (!hasUnitResult) return unitStr ? <span className="math-result-unit">{unitStr}</span> : null;
+  if (!rawResultsRef.current[id]) return unitStr ? <span className="math-result-unit ms-1">{unitStr}</span> : null;
 
   if (editing) {
     return (
-      <span className="unit-editor" onClick={e => e.stopPropagation()}>
-        <span className="unit-input-wrap">
-          <input
-            ref={inputRef}
-            className={`unit-input${flashErr ? ' unit-input--error' : ''}`}
-            value={draft}
-            onChange={e => setDraft(e.target.value)}
-            onKeyDown={handleKey}
-            onBlur={commit}
-            placeholder="e.g. kJ, mph"
-            spellCheck={false}
-          />
-          <UnitAutocomplete draft={draft} onSelect={u => { setDraft(u); setTimeout(commit, 50); }} />
-        </span>
-        {flashErr && <span className="unit-input-errmsg">incompatible unit</span>}
-      </span>
+      <input
+        ref={inputRef}
+        className="form-control form-control-sm font-monospace py-0 px-1 ms-1 d-inline-block"
+        style={{width: '70px', height: '24px'}}
+        value={draft} onChange={e => setDraft(e.target.value)}
+        onKeyDown={e => e.key === 'Enter' && commit()} onBlur={commit}
+        autoFocus spellCheck={false} onClick={e => e.stopPropagation()}
+      />
     );
   }
 
   return (
-    <span className="unit-editor">
-      <span
-        className={`math-result-unit math-result-unit--clickable${unitIsOverridden ? ' overridden' : ''}`}
-        onClick={startEdit}
-        title="Click to change unit"
-      >
-        {unitStr}
-      </span>
-      {unitIsOverridden && (
-        <button className="unit-reset-btn" onClick={e => { e.stopPropagation(); onUnitReset(id); }} title="Reset to auto unit">↺</button>
-      )}
+    <span className={`math-result-unit math-result-unit--clickable ms-1 ${unitOverrides[id] ? 'overridden' : ''}`} onClick={(e) => { e.stopPropagation(); setDraft(unitStr); setEditing(true); }} title="Change unit (Delete text to reset)">
+      {unitStr}
     </span>
   );
 }
 
-function CopyableNum({ numStr }) {
-  const [copied, setCopied] = useState(false);
+export default function MathBlock({ id, initialValue, setFocus }) {
+  const { results, activeMathFieldRef, actions } = useWorkspace();
+  const res = results[id] ?? {};
 
-  const handleClick = useCallback(e => {
-    e.stopPropagation();
-    const raw = numStr.replace(/\s×\s10/g, 'e').replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹⁻]/g, c =>
-      '⁰¹²³⁴⁵⁶⁷⁸⁹⁻'.indexOf(c).toString().replace('10','')
-    );
-    navigator.clipboard?.writeText(raw).catch(() => {});
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1200);
-  }, [numStr]);
-
-  return (
-    <span
-      className={`math-result-num${copied ? ' copied' : ''}`}
-      onClick={handleClick}
-      title="Click to copy value"
-    >
-      {copied ? '✓ copied' : numStr}
-    </span>
-  );
-}
-
-export default function MathBlock({
-  id, initialValue,
-  numStr, unitStr, hasError, errorLabel, errorMsg,
-  hasUnitResult, unitIsOverridden,
-  activeMathFieldRef,
-  setFocus, onDelete, onChange, onEnter, onNudge, onTransform,
-  onUnitChange, onUnitReset, onLeaveBlock
-}) {
-  const mathFieldRef   = useRef(null);
-  const tooltipRef     = useRef(null);
+  const mathFieldRef = useRef(null);
   const isTransforming = useRef(false);
-  const hasInitialized = useRef(false);
-  const callbacks      = useRef({ onDelete, onChange, onEnter, onNudge, onTransform, onLeaveBlock });
-  const [showTip, setShowTip] = useState(false);
+  const callbacks = useRef(actions);
 
-  useEffect(() => { callbacks.current = { onDelete, onChange, onEnter, onNudge, onTransform, onLeaveBlock }; },
-    [onDelete, onChange, onEnter, onNudge, onTransform, onLeaveBlock]);
-
-  useEffect(() => {
-    if (showTip && tooltipRef.current) {
-      const rect = tooltipRef.current.getBoundingClientRect();
-      if (rect.right > window.innerWidth) {
-        tooltipRef.current.style.left = 'auto';
-        tooltipRef.current.style.right = '0';
-      } else {
-        tooltipRef.current.style.left = '0';
-        tooltipRef.current.style.right = 'auto';
-      }
-    }
-  }, [showTip]);
+  useEffect(() => { callbacks.current = actions; }, [actions]);
 
   useEffect(() => {
     const mf = mathFieldRef.current;
     if (!mf) return;
 
-    if (!hasInitialized.current) {
-      if (initialValue && mf.getValue() === '') mf.setValue(initialValue);
+    if (initialValue && !mf.getValue()) {
+      mf.setValue(initialValue);
       setTimeout(() => mf.focus(), 50);
-      hasInitialized.current = true;
     }
 
-    const handleInput = () => {
-      const raw = mf.getValue('ascii-math');
-      const san = sanitizeMath(raw);
-      if (process.env.NODE_ENV === 'development') { const d = sanitizeMathDebug(raw); if (d) console.debug('[sanitize]', d); }
-      callbacks.current.onChange(id, san);
-    };
-
-    const handleFocusIn  = () => { setFocus(true);  if (activeMathFieldRef) activeMathFieldRef.current = mf; };
-    const handleFocusOut = () => {
-      setFocus(false);
-      if (!mf.getValue() && !isTransforming.current) callbacks.current.onDelete(id);
-    };
+    const handleInput = () => callbacks.current.change(id, sanitizeMath(mf.getValue('ascii-math')));
+    const handleFocusIn = () => { setFocus(true); if (activeMathFieldRef) activeMathFieldRef.current = mf; };
+    const handleFocusOut = () => { setFocus(false); if (!mf.getValue() && !isTransforming.current) callbacks.current.delete(id); };
 
     const handleKeyDown = (e) => {
+      // Empty Field shortcuts
       if (!mf.getValue()) {
-        if (e.key === '"' || e.key === "'") { e.preventDefault(); isTransforming.current = true; callbacks.current.onTransform(id, 'text'); return; }
-        if (e.key === '#') { e.preventDefault(); isTransforming.current = true; callbacks.current.onTransform(id, 'section'); return; }
-        
-        if (e.key.startsWith('Arrow')) {
-          e.preventDefault();
-          mf.blur();
-          callbacks.current.onDelete(id); 
-          callbacks.current.onLeaveBlock(id, e.key); 
-          return;
-        }
+        if (e.key === '"' || e.key === "'") { e.preventDefault(); isTransforming.current = true; callbacks.current.transform(id, 'text'); return; }
+        if (e.key === '#') { e.preventDefault(); isTransforming.current = true; callbacks.current.transform(id, 'section'); return; }
+        if (e.key.startsWith('Arrow')) { e.preventDefault(); mf.blur(); callbacks.current.delete(id); callbacks.current.leaveBlock(id, e.key); return; }
       }
-      
-      if (e.key === 'Escape') { 
-        e.preventDefault(); 
-        mf.blur(); 
-        callbacks.current.onLeaveBlock(id, 'Escape');
-        return; 
-      }
-      
-      // Shift+Enter push-down logic
-      if (e.key === 'Enter') { 
-        e.preventDefault(); 
-        mf.blur(); 
-        callbacks.current.onEnter(id, e.shiftKey); 
-        return; 
-      }
-      
-      // Tab navigation
-      if (e.key === 'Tab') {
-        e.preventDefault();
-        mf.blur();
-        callbacks.current.onLeaveBlock(id, e.shiftKey ? 'ShiftTab' : 'Tab');
-        return;
-      }
-      
+
+      // Standard Navigation
+      if (e.key === 'Escape') { e.preventDefault(); mf.blur(); callbacks.current.leaveBlock(id, 'Escape'); return; }
+      if (e.key === 'Enter') { e.preventDefault(); mf.blur(); callbacks.current.enter(id); return; }
+      if (e.key === 'Tab') { e.preventDefault(); mf.blur(); callbacks.current.leaveBlock(id, e.shiftKey ? 'ShiftTab' : 'Tab'); return; }
+
+      // Ctrl/Cmd + Arrow to Nudge
       if (e.key.startsWith('Arrow') && (e.ctrlKey || e.metaKey || !mf.getValue())) {
         e.preventDefault();
         const D = { ArrowUp:[0,-GRID_SIZE], ArrowDown:[0,GRID_SIZE], ArrowLeft:[-GRID_SIZE,0], ArrowRight:[GRID_SIZE,0] };
-        const [dx,dy] = D[e.key] ?? [0,0];
-        callbacks.current.onNudge(id, dx, dy);
+        callbacks.current.nudge(id, ...(D[e.key] ?? [0,0]));
       }
     };
 
-    mf.addEventListener('input',    handleInput);
-    mf.addEventListener('focusin',  handleFocusIn);
+    mf.addEventListener('input', handleInput);
+    mf.addEventListener('focusin', handleFocusIn);
     mf.addEventListener('focusout', handleFocusOut);
-    mf.addEventListener('keydown',  handleKeyDown);
+    mf.addEventListener('keydown', handleKeyDown);
+
     return () => {
-      mf.removeEventListener('input',    handleInput);
-      mf.removeEventListener('focusin',  handleFocusIn);
+      mf.removeEventListener('input', handleInput);
+      mf.removeEventListener('focusin', handleFocusIn);
       mf.removeEventListener('focusout', handleFocusOut);
-      mf.removeEventListener('keydown',  handleKeyDown);
+      mf.removeEventListener('keydown', handleKeyDown);
     };
   }, [id, initialValue, setFocus, activeMathFieldRef]);
 
-  const hasResult = numStr && numStr !== '';
+  const copyToClipboard = (e) => {
+    e.stopPropagation();
+    const raw = res.numStr.replace(/\s×\s10/g, 'e').replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹⁻]/g, c => '⁰¹²³⁴⁵⁶⁷⁸⁹⁻'.indexOf(c).toString().replace('10',''));
+    navigator.clipboard?.writeText(raw);
+  };
 
   return (
     <>
       <math-field ref={mathFieldRef} style={{ minWidth: '30px' }} />
-
-      {hasResult && !hasError && (
-        <span className="math-result-wrapper">
+      {res.numStr && !res.error && (
+        <span className="d-flex align-items-baseline gap-1 ms-2">
           <span className="math-result-equals">=</span>
-          <CopyableNum numStr={numStr} />
-          {unitStr && (
-            <UnitEditor
-              id={id}
-              unitStr={unitStr}
-              hasUnitResult={hasUnitResult}
-              unitIsOverridden={unitIsOverridden}
-              onUnitChange={onUnitChange}
-              onUnitReset={onUnitReset}
-            />
-          )}
+          <span className="math-result-num" onClick={copyToClipboard} title="Copy value">{res.numStr}</span>
+          {res.unitStr && <UnitEditor id={id} unitStr={res.unitStr} />}
         </span>
       )}
-
-      {hasError && (
-        <span
-          className={`math-error-badge math-error-badge--${(errorLabel ?? 'error').replace(/[^a-z0-9]/g, '-')}`}
-          onMouseEnter={() => setShowTip(true)}
-          onMouseLeave={() => setShowTip(false)}
-        >
-          {errorLabel ?? 'error'}
-          {showTip && errorMsg && <span ref={tooltipRef} className="math-error-tooltip">{errorMsg}</span>}
-        </span>
-      )}
+      {res.error && <span className="badge bg-danger ms-2" title={res.errorMsg}>{res.errorLabel ?? 'error'}</span>}
     </>
   );
 }

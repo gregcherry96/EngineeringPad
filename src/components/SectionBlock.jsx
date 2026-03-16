@@ -1,72 +1,30 @@
 import React, { useEffect, useRef } from 'react';
+import { useBlockNavigation } from '../hooks';
+import { useWorkspace } from '../WorkspaceContext';
 
-const GRID_SIZE = 20;
-
-export default function SectionBlock({ id, initialValue, setFocus, onDelete, onChange, onEnter, onNudge, onLeaveBlock }) {
+export default function SectionBlock({ id, initialValue, setFocus }) {
+  const { actions } = useWorkspace();
   const inputRef = useRef(null);
 
-  useEffect(() => {
-    if (inputRef.current) {
-      inputRef.current.focus();
-    }
-  }, []);
+  useEffect(() => { inputRef.current?.focus(); }, []);
 
-  const handleKeyDown = (e) => {
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      inputRef.current?.blur();
-      onLeaveBlock(id, 'Escape');
-      return;
-    }
-    
-    // Tab navigation
-    if (e.key === 'Tab') {
-      e.preventDefault();
-      inputRef.current?.blur();
-      onLeaveBlock(id, e.shiftKey ? 'ShiftTab' : 'Tab');
-      return;
-    }
-
-    if (e.key.startsWith('Arrow') && !inputRef.current.value) {
-      e.preventDefault();
-      inputRef.current?.blur();
-      onDelete(id);
-      onLeaveBlock(id, e.key);
-      return;
-    }
-
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      inputRef.current?.blur();
-      onEnter(id, e.shiftKey);
-      return;
-    }
-    
-    if (e.key.startsWith('Arrow') && (e.ctrlKey || e.metaKey || !inputRef.current.value)) {
-      e.preventDefault();
-      const D = { ArrowUp: [0, -GRID_SIZE], ArrowDown: [0, GRID_SIZE], ArrowLeft: [-GRID_SIZE, 0], ArrowRight: [GRID_SIZE, 0] };
-      const [dx, dy] = D[e.key] ?? [0, 0];
-      onNudge(id, dx, dy);
-    }
-  };
-
-  const handleBlur = () => {
-    setFocus(false);
-    if (!inputRef.current?.value.trim()) {
-      onDelete(id); 
-    }
-  };
+  const handleKeyDown = useBlockNavigation({
+    id, value: inputRef.current?.value, inputRef,
+    onDelete: actions.delete, onEnter: actions.enter,
+    onNudge: actions.nudge, onLeaveBlock: actions.leaveBlock
+  });
 
   return (
     <input
       ref={inputRef}
-      className="section-block-input"
+      className="form-control form-control-lg border-0 bg-transparent fw-bold text-dark p-0 shadow-none m-0"
+      style={{ width: '600px', fontSize: '1.5rem', fontFamily: 'Inter, sans-serif' }}
       type="text"
       value={initialValue}
-      onChange={e => onChange(id, e.target.value)}
+      onChange={e => actions.change(id, e.target.value)}
       onKeyDown={handleKeyDown}
       onFocus={() => setFocus(true)}
-      onBlur={handleBlur}
+      onBlur={() => { setFocus(false); if (!inputRef.current?.value.trim()) actions.delete(id); }}
       placeholder="Section Heading"
       spellCheck={false}
     />
