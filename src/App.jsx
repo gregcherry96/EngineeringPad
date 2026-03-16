@@ -1,17 +1,19 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { usePanZoom } from './hooks';
-import { WorkspaceProvider, useWorkspace, makeBlock } from './WorkspaceContext';
+import { WorkspaceProvider, useWorkspaceData, useWorkspaceInteraction } from './WorkspaceContext';
 import Sidebar from './components/Sidebar';
 import Toolbar from './components/Toolbar';
 import CanvasArea from './components/CanvasArea';
+import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
 import './App.css';
 
 function AppContent() {
   const {
-    blocks, selectedIds, cursorPos, activeMathFieldRef,
-    undo, redo, canUndo, canRedo, updateBlocks, userVars,
+    blocks, undo, redo, canUndo, canRedo, updateBlocks, userVars,
     actions
-  } = useWorkspace();
+  } = useWorkspaceData();
+
+  const { selectedIds, cursorPos, activeMathFieldRef } = useWorkspaceInteraction();
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showGrid, setShowGrid] = useState(true);
@@ -23,34 +25,9 @@ function AppContent() {
 
   const { zoom, setZoom, startPan, pan, stopPan, isPanning } = usePanZoom(graphPaperRef);
 
-  useEffect(() => {
-    const handleKey = (e) => {
-      if (e.target.closest('input, textarea, math-field')) return;
-
-      if (e.key === 'Backspace' || e.key === 'Delete') {
-        if (selectedIds.length > 0) { e.preventDefault(); actions.delete(selectedIds[0]); }
-        return;
-      }
-
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); undo(); }
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'z'))) { e.preventDefault(); redo(); }
-      if (e.code === 'Space') { e.preventDefault(); spaceHeld.current = true; graphPaperRef.current?.classList.add('panning-mode'); }
-
-      if (cursorPos && e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
-        e.preventDefault();
-        const type = e.key === '"' || e.key === "'" ? 'text' : e.key === '#' ? 'section' : 'math';
-        const newBlock = makeBlock(cursorPos.x, cursorPos.y, type);
-        newBlock.expression = type === 'math' ? e.key : '';
-        updateBlocks(p => [...p, newBlock], true);
-        actions.select([newBlock.id]); actions.setCursorPos(null);
-      }
-    };
-
-    const handleKeyUp = (e) => { if (e.code === 'Space') { spaceHeld.current = false; graphPaperRef.current?.classList.remove('panning-mode'); } };
-
-    window.addEventListener('keydown', handleKey); window.addEventListener('keyup', handleKeyUp);
-    return () => { window.removeEventListener('keydown', handleKey); window.removeEventListener('keyup', handleKeyUp); };
-  }, [cursorPos, undo, redo, blocks, selectedIds, actions, updateBlocks]);
+  useGlobalShortcuts({
+    blocks, selectedIds, cursorPos, undo, redo, actions, updateBlocks, spaceHeld, graphPaperRef
+  });
 
   return (
     <div className="d-flex flex-column vh-100 vw-100 overflow-hidden">

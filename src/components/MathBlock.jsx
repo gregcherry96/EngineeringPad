@@ -1,12 +1,24 @@
 import React, { useEffect, useRef, useState } from 'react';
 import 'mathlive';
 import { sanitizeMath } from '../utils/mathSanitize';
-import { useWorkspace } from '../WorkspaceContext';
+import { useWorkspaceData } from '../WorkspaceContext';
+import MathFieldWrapper from './MathFieldWrapper';
+import {
+  SHORTCUT_TEXT,
+  SHORTCUT_SECTION,
+  SHORTCUT_LEAVE_ESCAPE,
+  SHORTCUT_LEAVE_ENTER,
+  SHORTCUT_LEAVE_TAB,
+  SHORTCUT_NUDGE_UP,
+  SHORTCUT_NUDGE_DOWN,
+  SHORTCUT_NUDGE_LEFT,
+  SHORTCUT_NUDGE_RIGHT
+} from '../utils/keyboardConfig';
 
 const GRID_SIZE = 20;
 
 function UnitEditor({ id, unitStr }) {
-  const { rawResultsRef, unitOverrides, actions } = useWorkspace();
+  const { rawResultsRef, unitOverrides, actions } = useWorkspaceData();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const inputRef = useRef(null);
@@ -40,74 +52,58 @@ function UnitEditor({ id, unitStr }) {
 }
 
 export default function MathBlock({ id, initialValue, setFocus }) {
-  const { results, activeMathFieldRef, actions } = useWorkspace();
+  const { results, actions, activeMathFieldRef } = useWorkspaceData();
   const resultData = results[id];
   const res = resultData ?? {};
 
-  // Track if the local input has changed but global evaluation hasn't caught up yet
   const [isStale, setIsStale] = useState(false);
-
   const mathFieldRef = useRef(null);
   const isTransforming = useRef(false);
-  const callbacks = useRef(actions);
 
-  useEffect(() => { callbacks.current = actions; }, [actions]);
-
-  // When the global result updates, clear the stale visual state
   useEffect(() => {
     setIsStale(false);
   }, [resultData]);
 
-  useEffect(() => {
-    const mf = mathFieldRef.current;
-    if (!mf) return;
+  const handleInput = (e, mf) => {
+    setIsStale(true);
+    actions.change(id, sanitizeMath(mf.getValue('ascii-math')));
+  };
 
-    if (initialValue && !mf.getValue()) {
-      mf.setValue(initialValue);
-      setTimeout(() => mf.focus(), 50);
+  const handleFocusIn = (e, mf) => {
+    setFocus(true);
+    if (activeMathFieldRef) activeMathFieldRef.current = mf;
+  };
+
+  const handleFocusOut = (e, mf) => {
+    setFocus(false);
+    if (!mf.getValue() && !isTransforming.current) actions.delete(id);
+  };
+
+  const handleKeyDown = (e, mf) => {
+    // Empty Field shortcuts (transforming blocks)
+    if (!mf.getValue()) {
+      if (SHORTCUT_TEXT.includes(e.key)) { e.preventDefault(); isTransforming.current = true; actions.transform(id, 'text'); return; }
+      if (SHORTCUT_SECTION.includes(e.key)) { e.preventDefault(); isTransforming.current = true; actions.transform(id, 'section'); return; }
+      if (e.key.startsWith('Arrow')) { e.preventDefault(); mf.blur(); actions.delete(id); actions.leaveBlock(id, e.key); return; }
     }
 
-    const handleInput = () => {
-      setIsStale(true); // Visually indicate evaluation is pending
-      callbacks.current.change(id, sanitizeMath(mf.getValue('ascii-math')));
-    };
+    // Standard Navigation
+    if (e.key === SHORTCUT_LEAVE_ESCAPE) { e.preventDefault(); mf.blur(); actions.leaveBlock(id, 'Escape'); return; }
+    if (e.key === SHORTCUT_LEAVE_ENTER) { e.preventDefault(); mf.blur(); actions.enter(id); return; }
+    if (e.key === SHORTCUT_LEAVE_TAB) { e.preventDefault(); mf.blur(); actions.leaveBlock(id, e.shiftKey ? 'ShiftTab' : 'Tab'); return; }
 
-    const handleFocusIn = () => { setFocus(true); if (activeMathFieldRef) activeMathFieldRef.current = mf; };
-    const handleFocusOut = () => { setFocus(false); if (!mf.getValue() && !isTransforming.current) callbacks.current.delete(id); };
-
-    const handleKeyDown = (e) => {
-      // Empty Field shortcuts
-      if (!mf.getValue()) {
-        if (e.key === '"' || e.key === "'") { e.preventDefault(); isTransforming.current = true; callbacks.current.transform(id, 'text'); return; }
-        if (e.key === '#') { e.preventDefault(); isTransforming.current = true; callbacks.current.transform(id, 'section'); return; }
-        if (e.key.startsWith('Arrow')) { e.preventDefault(); mf.blur(); callbacks.current.delete(id); callbacks.current.leaveBlock(id, e.key); return; }
-      }
-
-      // Standard Navigation
-      if (e.key === 'Escape') { e.preventDefault(); mf.blur(); callbacks.current.leaveBlock(id, 'Escape'); return; }
-      if (e.key === 'Enter') { e.preventDefault(); mf.blur(); callbacks.current.enter(id); return; }
-      if (e.key === 'Tab') { e.preventDefault(); mf.blur(); callbacks.current.leaveBlock(id, e.shiftKey ? 'ShiftTab' : 'Tab'); return; }
-
-      // Ctrl/Cmd + Arrow to Nudge
-      if (e.key.startsWith('Arrow') && (e.ctrlKey || e.metaKey || !mf.getValue())) {
-        e.preventDefault();
-        const D = { ArrowUp:[0,-GRID_SIZE], ArrowDown:[0,GRID_SIZE], ArrowLeft:[-GRID_SIZE,0], ArrowRight:[GRID_SIZE,0] };
-        callbacks.current.nudge(id, ...(D[e.key] ?? [0,0]));
-      }
-    };
-
-    mf.addEventListener('input', handleInput);
-    mf.addEventListener('focusin', handleFocusIn);
-    mf.addEventListener('focusout', handleFocusOut);
-    mf.addEventListener('keydown', handleKeyDown);
-
-    return () => {
-      mf.removeEventListener('input', handleInput);
-      mf.removeEventListener('focusin', handleFocusIn);
-      mf.removeEventListener('focusout', handleFocusOut);
-      mf.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [id, initialValue, setFocus, activeMathFieldRef]);
+    // Ctrl/Cmd + Arrow to Nudge
+    if (e.key.startsWith('Arrow') && (e.ctrlKey || e.metaKey || !mf.getValue())) {
+      e.preventDefault();
+      const D = {
+        [SHORTCUT_NUDGE_UP]: [0, -GRID_SIZE],
+        [SHORTCUT_NUDGE_DOWN]: [0, GRID_SIZE],
+        [SHORTCUT_NUDGE_LEFT]: [-GRID_SIZE, 0],
+        [SHORTCUT_NUDGE_RIGHT]: [GRID_SIZE, 0]
+      };
+      actions.nudge(id, ...(D[e.key] ?? [0,0]));
+    }
+  };
 
   const copyToClipboard = (e) => {
     e.stopPropagation();
@@ -117,7 +113,15 @@ export default function MathBlock({ id, initialValue, setFocus }) {
 
   return (
     <>
-      <math-field ref={mathFieldRef} style={{ minWidth: '30px' }} />
+      <MathFieldWrapper
+        ref={mathFieldRef}
+        style={{ minWidth: '30px' }}
+        value={initialValue}
+        onInput={handleInput}
+        onFocusIn={handleFocusIn}
+        onFocusOut={handleFocusOut}
+        onKeyDown={handleKeyDown}
+      />
       {res.numStr && !res.error && (
         <span className={`d-flex align-items-baseline gap-1 ms-2 transition-opacity duration-150 ${isStale ? 'opacity-50' : 'opacity-100'}`}>
           <span className="math-result-equals">=</span>

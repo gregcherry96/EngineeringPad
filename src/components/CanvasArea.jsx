@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { useWorkspace } from '../WorkspaceContext';
+import { useWorkspaceData, useWorkspaceInteraction } from '../WorkspaceContext';
 import BlockWrapper from './BlockWrapper';
 
 const GRID_SIZE = 20;
@@ -8,7 +8,8 @@ export default function CanvasArea({
   zoom, startPan, pan, stopPan, isPanning, spaceHeld, graphPaperRef,
   showGrid, paperMode, pageCount
 }) {
-  const { blocks, selectedIds, cursorPos, updateBlocks, actions } = useWorkspace();
+  const { blocks, updateBlocks, actions } = useWorkspaceData();
+  const { selectedIds, cursorPos } = useWorkspaceInteraction();
   const [marquee, setMarquee] = useState(null);
   const canvasRef = useRef(null);
 
