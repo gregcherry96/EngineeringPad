@@ -280,6 +280,8 @@ export default function App() {
           showGrid={showGrid} onToggleGrid={() => setShowGrid(!showGrid)}
           paperMode={paperMode} onTogglePaper={() => setPaperMode(!paperMode)}
           onAddPage={() => setPageCount(p => p + 1)}
+          onRemovePage={() => setPageCount(p => Math.max(1, p - 1))}
+          pageCount={pageCount}
         />
 
         <div className="d-flex flex-grow-1 overflow-hidden">

@@ -1,6 +1,6 @@
 import React from 'react';
 
-export default function Toolbar({ onUndo, onRedo, canUndo, canRedo, onClear, zoom, onZoomChange, showGrid, onToggleGrid, paperMode, onTogglePaper, onAddPage }) {
+export default function Toolbar({ onUndo, onRedo, canUndo, canRedo, onClear, zoom, onZoomChange, showGrid, onToggleGrid, paperMode, onTogglePaper, onAddPage, onRemovePage, pageCount }) {
   return (
     <nav className="navbar navbar-expand bg-white border-bottom shadow-sm px-3 py-2 z-3 flex-shrink-0">
       <span className="navbar-brand fw-bold mb-0 me-auto" style={{fontFamily: 'Lora, serif'}}>MathPad</span>
@@ -27,11 +27,25 @@ export default function Toolbar({ onUndo, onRedo, canUndo, canRedo, onClear, zoo
             <i className="bi bi-file-earmark"></i>
           </button>
 
-          {/* Add Page Button - Only visible in Paper Mode */}
+          {/* Add / Remove Page Buttons - Only visible in Paper Mode */}
           {paperMode && (
-            <button className="btn btn-sm btn-outline-secondary border-0 ms-1" onClick={onAddPage} title="Add Page">
-              <i className="bi bi-file-earmark-plus"></i> Add Page
-            </button>
+            <>
+              <button
+                className="btn btn-sm btn-outline-secondary border-0 ms-1"
+                onClick={onRemovePage}
+                disabled={pageCount <= 1} /* Disable if only 1 page left */
+                title="Remove Page"
+              >
+                <i className="bi bi-file-earmark-minus"></i>
+              </button>
+              <button
+                className="btn btn-sm btn-outline-secondary border-0"
+                onClick={onAddPage}
+                title="Add Page"
+              >
+                <i className="bi bi-file-earmark-plus"></i>
+              </button>
+            </>
           )}
         </div>
       </div>
