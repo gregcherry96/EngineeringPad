@@ -41,13 +41,22 @@ function UnitEditor({ id, unitStr }) {
 
 export default function MathBlock({ id, initialValue, setFocus }) {
   const { results, activeMathFieldRef, actions } = useWorkspace();
-  const res = results[id] ?? {};
+  const resultData = results[id];
+  const res = resultData ?? {};
+
+  // Track if the local input has changed but global evaluation hasn't caught up yet
+  const [isStale, setIsStale] = useState(false);
 
   const mathFieldRef = useRef(null);
   const isTransforming = useRef(false);
   const callbacks = useRef(actions);
 
   useEffect(() => { callbacks.current = actions; }, [actions]);
+
+  // When the global result updates, clear the stale visual state
+  useEffect(() => {
+    setIsStale(false);
+  }, [resultData]);
 
   useEffect(() => {
     const mf = mathFieldRef.current;
@@ -58,7 +67,11 @@ export default function MathBlock({ id, initialValue, setFocus }) {
       setTimeout(() => mf.focus(), 50);
     }
 
-    const handleInput = () => callbacks.current.change(id, sanitizeMath(mf.getValue('ascii-math')));
+    const handleInput = () => {
+      setIsStale(true); // Visually indicate evaluation is pending
+      callbacks.current.change(id, sanitizeMath(mf.getValue('ascii-math')));
+    };
+
     const handleFocusIn = () => { setFocus(true); if (activeMathFieldRef) activeMathFieldRef.current = mf; };
     const handleFocusOut = () => { setFocus(false); if (!mf.getValue() && !isTransforming.current) callbacks.current.delete(id); };
 
@@ -106,13 +119,17 @@ export default function MathBlock({ id, initialValue, setFocus }) {
     <>
       <math-field ref={mathFieldRef} style={{ minWidth: '30px' }} />
       {res.numStr && !res.error && (
-        <span className="d-flex align-items-baseline gap-1 ms-2">
+        <span className={`d-flex align-items-baseline gap-1 ms-2 transition-opacity duration-150 ${isStale ? 'opacity-50' : 'opacity-100'}`}>
           <span className="math-result-equals">=</span>
           <span className="math-result-num" onClick={copyToClipboard} title="Copy value">{res.numStr}</span>
           {res.unitStr && <UnitEditor id={id} unitStr={res.unitStr} />}
         </span>
       )}
-      {res.error && <span className="badge bg-danger ms-2" title={res.errorMsg}>{res.errorLabel ?? 'error'}</span>}
+      {res.error && (
+        <span className={`badge bg-danger ms-2 transition-opacity duration-150 ${isStale ? 'opacity-50' : 'opacity-100'}`} title={res.errorMsg}>
+          {res.errorLabel ?? 'error'}
+        </span>
+      )}
     </>
   );
 }

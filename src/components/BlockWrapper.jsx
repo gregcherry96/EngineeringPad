@@ -10,7 +10,9 @@ const GRID_SIZE = 20;
 export default function BlockWrapper({ block }) {
   const { results, selectedIds, activeDrag, actions } = useWorkspace();
   const [isFocused, setIsFocused] = useState(false);
-  const wasDragged = useRef(false);
+
+  // Track mouse start position to differentiate between a click and a drag
+  const mouseDownPos = useRef({ x: 0, y: 0 });
 
   const hasError = !!results[block.id]?.error;
   const isSelected = selectedIds.includes(block.id);
@@ -36,23 +38,18 @@ export default function BlockWrapper({ block }) {
     <Rnd
       position={{ x: displayX, y: displayY }}
       onDragStart={(e) => {
-        wasDragged.current = false;
         // If they start dragging a block that isn't selected yet, select it
         if (!isSelected) {
           actions.select(e.shiftKey ? [...selectedIds, block.id] : [block.id]);
         }
       }}
       onDrag={(e, d) => {
-        wasDragged.current = true;
         actions.drag(block.id, d.x - block.x, d.y - block.y);
       }}
       onDragStop={(e, d) => {
         const dx = Math.round((d.x - block.x) / GRID_SIZE) * GRID_SIZE;
         const dy = Math.round((d.y - block.y) / GRID_SIZE) * GRID_SIZE;
         actions.dragStop(block.id, dx, dy);
-
-        // Prevent onClick from immediately clearing the selection after dropping
-        setTimeout(() => { wasDragged.current = false; }, 50);
       }}
       enableResizing={false}
       dragGrid={[GRID_SIZE, GRID_SIZE]}
@@ -62,11 +59,21 @@ export default function BlockWrapper({ block }) {
       <div
         id={`block-container-${block.id}`}
         className="block-container position-relative d-flex align-items-start"
+        onMouseDown={(e) => {
+          // Record the starting coordinates of the interaction
+          mouseDownPos.current = { x: e.clientX, y: e.clientY };
+        }}
         onClick={(e) => {
           e.stopPropagation();
-          // If we just dropped it from a drag, don't trigger a click
-          if (wasDragged.current) return;
 
+          // Calculate how far the mouse moved between mousedown and mouseup
+          const dx = Math.abs(e.clientX - mouseDownPos.current.x);
+          const dy = Math.abs(e.clientY - mouseDownPos.current.y);
+
+          // If the mouse moved more than 5px, it was a drag, so ignore the click
+          if (dx > 5 || dy > 5) return;
+
+          // Process normal click selection
           if (e.shiftKey) {
             actions.select(isSelected ? selectedIds.filter(id => id !== block.id) : [...selectedIds, block.id]);
           } else {
