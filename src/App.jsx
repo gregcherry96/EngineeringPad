@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import * as math from 'mathjs';
 import { MATH_SCOPE } from './constants';
 import Sidebar from './Sidebar';
-import BlockWrapper from './BlockWrapper';
+import BlockWrapper from './components/BlockWrapper';
 import './App.css';
 
 const GRID_SIZE = 20;
