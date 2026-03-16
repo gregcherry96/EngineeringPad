@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { SIDEBAR_CATALOGUE } from './constants';
+import { SIDEBAR_CATALOGUE } from '../utils/mathConstants';
 
 function CatalogueGroup({ group, onInsert, defaultOpen = false }) {
   const [open, setOpen] = useState(defaultOpen);

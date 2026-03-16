@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import 'mathlive';
-import { sanitizeMath } from './sanitizeMath';
+import { sanitizeMath } from '../utils/mathSanitize';
 import { useWorkspace } from '../WorkspaceContext';
 
 const GRID_SIZE = 20;

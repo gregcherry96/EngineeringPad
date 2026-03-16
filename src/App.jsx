@@ -1,10 +1,10 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import * as math from 'mathjs';
-import { MATH_SCOPE } from './constants';
+import { MATH_SCOPE } from './utils/mathConstants';
 import { useHistory, usePanZoom } from './hooks';
-import { formatMathResult, classifyError, convertResult } from './utils';
+import { formatMathResult, classifyError, convertResult } from './utils/mathUtils';
 import { WorkspaceContext } from './WorkspaceContext';
-import Sidebar from './Sidebar';
+import Sidebar from './components/Sidebar';
 import Toolbar from './components/Toolbar';
 import BlockWrapper from './components/BlockWrapper';
 import './App.css';
