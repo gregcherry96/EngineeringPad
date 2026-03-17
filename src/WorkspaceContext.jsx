@@ -29,7 +29,9 @@ export function WorkspaceProvider({ children }) {
     return [];
   };
 
-  const { state: blocks, setState: setBlocks, pushUndo, undo, redo, canUndo, canRedo, clearHistory } = useHistory(getInitialBlocks());
+  // Step 2: Use useMemo to prevent re-parsing localStorage on every render for custom hook
+  const initialBlocks = useMemo(() => getInitialBlocks(), []);
+  const { state: blocks, setState: setBlocks, pushUndo, undo, redo, canUndo, canRedo, clearHistory } = useHistory(initialBlocks);
 
   const getInitialOverrides = () => {
     try {
@@ -39,7 +41,8 @@ export function WorkspaceProvider({ children }) {
     return {};
   };
 
-  const [unitOverrides, setUnitOverrides] = useState(getInitialOverrides());
+  // Step 2: Lazy evaluation function passed to useState
+  const [unitOverrides, setUnitOverrides] = useState(getInitialOverrides);
   const [activeDrag, setActiveDrag] = useState(null);
   const [cursorPos, setCursorPos] = useState(null);
   const [selectedIds, setSelectedIdsState] = useState([]);
@@ -70,7 +73,6 @@ export function WorkspaceProvider({ children }) {
     ...actionsHook,
     drag: (id, dx, dy) => { if (selectedIdsRef.current.includes(id)) setActiveDrag({ id, dx, dy }); },
     dragStop: (id, dx, dy) => actionsHook.dragStop(id, dx, dy, setActiveDrag),
-    // Step 1 & 3: New Actions for perfect rendering and resizing
     resize: (id, width) => actionsHook.updateBlocks(p => p.map(b => b.id === id ? { ...b, width } : b), true),
     changeMath: (id, expression, latex) => actionsHook.updateBlocks(p => p.map(b => b.id === id ? { ...b, expression, latex } : b), true),
     loadWorkspace: (newBlocks, newOverrides = {}) => {

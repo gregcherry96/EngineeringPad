@@ -170,3 +170,41 @@ math-field { color: #1a1714; background: transparent; min-width: 30px; min-heigh
   cursor: crosshair !important;
 }
 
+/* Step 3: Dynamic Canvas Cursors */
+.cursor-crosshair {
+  cursor: crosshair !important;
+}
+
+.cursor-grab {
+  cursor: grab !important;
+}
+
+.cursor-grabbing {
+  cursor: grabbing !important;
+}
+
+/* Step 4: Refine the Empty State */
+@keyframes pulse-opacity {
+  0% { opacity: 0.4; transform: scale(0.98); }
+  50% { opacity: 0.8; transform: scale(1); }
+  100% { opacity: 0.4; transform: scale(0.98); }
+}
+
+.empty-state-animated {
+  animation: pulse-opacity 4s ease-in-out infinite;
+  transition: all 0.3s ease;
+}
+
+/* Inline Unit Editor Styles */
+.unit-badge {
+  cursor: pointer;
+  border-bottom: 1px dashed transparent;
+  padding: 0 2px;
+  border-radius: 3px;
+  transition: all 0.2s ease;
+}
+
+.unit-badge:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+  border-bottom: 1px dashed #6c757d;
+}

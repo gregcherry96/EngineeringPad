@@ -1,34 +1,45 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useWorkspaceData, useWorkspaceInteraction, useWorkspaceActionData } from '../WorkspaceContext';
 import BlockWrapper from './BlockWrapper';
-import { GRID_SIZE, PAPER_SIZES } from '../utils/canvasConfig';
-import { calculateWorldCoordinates, calculateMarqueeBounds } from '../utils/canvasUtils';
+import { GRID_SIZE, PAPER_SIZES, BLOCK_ESTIMATED_WIDTH, BLOCK_ESTIMATED_HEIGHT, CANVAS_PADDING, DOM_CLASSES } from '../utils/canvasConfig';
+import { calculateWorldCoordinates, calculateMarqueeBounds, getIntersectingBlocks } from '../utils/canvasUtils';
 
 export default function CanvasArea({
   zoom, startPan, pan, stopPan, isPanning, spaceHeld, graphPaperRef,
   showGrid, paperMode, pageCount
 }) {
-  // Corrected: Split the context hooks properly!
   const { blocks, results } = useWorkspaceData();
   const { selectedIds, cursorPos } = useWorkspaceInteraction();
   const { actions, updateBlocks } = useWorkspaceActionData();
 
   const [marquee, setMarquee] = useState(null);
   const canvasRef = useRef(null);
+  const rafRef = useRef(null);
+  const mousePosRef = useRef(null);
 
   const canvasToWorld = (clientX, clientY) => {
     return calculateWorldCoordinates(clientX, clientY, canvasRef.current?.getBoundingClientRect(), zoom, GRID_SIZE);
   };
 
+  useEffect(() => {
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, []);
+
   const handleMouseDown = (e) => {
     if (e.button === 1 || spaceHeld.current) { startPan(e); return; }
-    if (e.target.closest('.block-container') || e.target.closest('.sidebar-panel') || e.target.closest('.navbar')) return;
 
-    if (paperMode && !e.target.closest('.canvas-area')) return;
+    if (
+      e.target.closest(`.${DOM_CLASSES.BLOCK_CONTAINER}`) ||
+      e.target.closest(`.${DOM_CLASSES.SIDEBAR}`) ||
+      e.target.closest(`.${DOM_CLASSES.NAVBAR}`)
+    ) return;
+
+    if (paperMode && !e.target.closest(`.${DOM_CLASSES.CANVAS}`)) return;
 
     const { x, y } = canvasToWorld(e.clientX, e.clientY);
 
-    // Snapshot existing selection if Shift is held
     setMarquee({ startX: x, startY: y, endX: x, endY: y, initialSelection: e.shiftKey ? selectedIds : [] });
 
     if (!e.shiftKey) {
@@ -40,22 +51,36 @@ export default function CanvasArea({
   const handleMouseMove = (e) => {
     if (isPanning.current) { pan(e); return; }
     if (marquee) {
-      const { x, y } = canvasToWorld(e.clientX, e.clientY);
-      setMarquee(prev => ({ ...prev, endX: x, endY: y }));
+      mousePosRef.current = { clientX: e.clientX, clientY: e.clientY };
 
-      const bounds = calculateMarqueeBounds({ ...marquee, endX: x, endY: y });
+      if (!rafRef.current) {
+        rafRef.current = requestAnimationFrame(() => {
+          if (!mousePosRef.current) return;
 
-      const newlySelected = blocks.filter(b =>
-        b.x < bounds.maxX && b.x + 100 > bounds.minX && b.y < bounds.maxY && b.y + 40 > bounds.minY
-      ).map(b => b.id);
+          const { x, y } = canvasToWorld(mousePosRef.current.clientX, mousePosRef.current.clientY);
+          setMarquee(prev => ({ ...prev, endX: x, endY: y }));
 
-      // Merge initial selection with the new box bounds to allow additive selection
-      actions.select([...new Set([...marquee.initialSelection, ...newlySelected])]);
+          const currentMarquee = { ...marquee, endX: x, endY: y };
+          const bounds = calculateMarqueeBounds(currentMarquee);
+
+          const newlySelectedBlocks = getIntersectingBlocks(blocks, bounds, BLOCK_ESTIMATED_WIDTH, BLOCK_ESTIMATED_HEIGHT);
+          const newlySelected = newlySelectedBlocks.map(b => b.id);
+
+          actions.select([...new Set([...marquee.initialSelection, ...newlySelected])]);
+
+          rafRef.current = null;
+        });
+      }
     }
   };
 
   const handleMouseUp = (e) => {
     if (isPanning.current) stopPan();
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+
     if (marquee) {
       const bounds = calculateMarqueeBounds(marquee);
 
@@ -66,11 +91,19 @@ export default function CanvasArea({
         if (hasEmpty) updateBlocks(p => p.filter(b => b.expression.trim()), true);
       }
       setMarquee(null);
+      mousePosRef.current = null;
     }
   };
 
-  const maxW = Math.max(2000, ...blocks.map(b => b.x + 800), cursorPos ? cursorPos.x + 800 : 0);
-  const maxH = Math.max(2000, ...blocks.map(b => b.y + 800), cursorPos ? cursorPos.y + 800 : 0);
+  // Step 3: Determine the correct cursor class
+  const getInteractionCursor = () => {
+    if (isPanning.current) return 'cursor-grabbing';
+    if (spaceHeld.current) return 'cursor-grab';
+    return 'cursor-crosshair';
+  };
+
+  const maxW = Math.max(2000, ...blocks.map(b => b.x + CANVAS_PADDING), cursorPos ? cursorPos.x + CANVAS_PADDING : 0);
+  const maxH = Math.max(2000, ...blocks.map(b => b.y + CANVAS_PADDING), cursorPos ? cursorPos.y + CANVAS_PADDING : 0);
 
   const a4 = PAPER_SIZES.A4;
 
@@ -87,14 +120,15 @@ export default function CanvasArea({
         );
       })()}
 
-      {/* Empty Canvas Helper Text */}
       {blocks.length === 0 && !cursorPos && (
         <div
-          className="position-absolute top-50 start-50 translate-middle text-muted user-select-none opacity-50 text-center"
+          // Step 4: Applied the 'empty-state-animated' class to make the helper text pulse gently
+          className="empty-state-animated position-absolute top-50 start-50 translate-middle text-muted user-select-none text-center"
           style={{ pointerEvents: 'none', width: '300px' }}
         >
-          <h5>Canvas is empty</h5>
-          <p className="mb-0">Click anywhere to start typing</p>
+          <h4 className="mb-2">Canvas is empty</h4>
+          <p className="mb-0">Click anywhere to start typing math.</p>
+          <p className="small mt-2 opacity-75">Hold Spacebar to pan.</p>
         </div>
       )}
 
@@ -105,7 +139,8 @@ export default function CanvasArea({
   return (
     <div
       ref={graphPaperRef}
-      className={`graph-paper flex-grow-1 ${paperMode ? 'paper-mode-backdrop' : 'infinite-canvas-bg'} ${!paperMode && showGrid ? 'grid-bg' : ''} ${marquee ? 'is-selecting' : ''}`}
+      // Step 3: Injected `getInteractionCursor()` to apply the correct interaction mouse state
+      className={`graph-paper flex-grow-1 ${getInteractionCursor()} ${paperMode ? 'paper-mode-backdrop' : 'infinite-canvas-bg'} ${!paperMode && showGrid ? 'grid-bg' : ''} ${marquee ? 'is-selecting' : ''}`}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
@@ -121,7 +156,6 @@ export default function CanvasArea({
               width: `${a4.width}px`,
               height: `${a4.height * pageCount}px`,
               flexShrink: 0,
-              // Visual Page Breaks
               backgroundImage: pageCount > 1 ? `linear-gradient(to bottom, transparent calc(100% - 1px), #ccc calc(100% - 1px))` : 'none',
               backgroundSize: `100% ${a4.height}px`
             }}

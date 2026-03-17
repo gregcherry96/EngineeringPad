@@ -19,17 +19,30 @@ export function useMathEvaluation(blocks, unitOverrides, setUnitOverrides) {
       setUserVars(newVars);
     };
 
-    return () => workerRef.current.terminate();
-  }, []); // Cleaned up dependency array
+    return () => {
+      // Step 3: Strictly nullify to prevent accessing a terminated worker later
+      if (workerRef.current) {
+        workerRef.current.terminate();
+        workerRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
+    // Step 3: Track mount status to avoid postMessage on unmounted hook
+    let isActive = true;
+
     const timerId = setTimeout(() => {
-      if (workerRef.current) {
+      // Verify worker exists and hook is active
+      if (isActive && workerRef.current) {
         workerRef.current.postMessage({ blocks, unitOverrides });
       }
     }, 150);
 
-    return () => clearTimeout(timerId);
+    return () => {
+      isActive = false;
+      clearTimeout(timerId);
+    };
   }, [blocks, unitOverrides]);
 
   return { results, userVars, rawResultsRef };

@@ -21,3 +21,12 @@ export const calculateMarqueeBounds = (marquee) => {
     dy: Math.abs(marquee.startY - marquee.endY)
   };
 };
+
+export function getIntersectingBlocks(blocks, bounds, estimatedWidth, estimatedHeight) {
+  return blocks.filter(b =>
+    b.x < bounds.maxX &&
+    b.x + estimatedWidth > bounds.minX &&
+    b.y < bounds.maxY &&
+    b.y + estimatedHeight > bounds.minY
+  );
+}

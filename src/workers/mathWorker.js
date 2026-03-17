@@ -1,8 +1,11 @@
 import * as math from 'mathjs';
 import { MATH_SCOPE } from '../utils/mathConstants';
 import { formatMathResult, classifyError, convertResult } from '../utils/mathUtils';
+// Step 1: Import GRID_SIZE from config instead of hardcoding
+import { GRID_SIZE } from '../utils/canvasConfig';
 
-const GRID_SIZE = 20;
+// Step 2: Move static initializations out of the onmessage execution path
+const baseKeys = new Set(Object.keys(MATH_SCOPE));
 
 self.onmessage = function(e) {
   const { blocks, unitOverrides } = e.data;
@@ -13,7 +16,6 @@ self.onmessage = function(e) {
 
   const scope = { ...MATH_SCOPE };
   const newResults = {}, newRaw = {}, newVars = {};
-  const baseKeys = new Set(Object.keys(MATH_SCOPE));
 
   for (const block of sortedBlocks) {
     if (block.type !== 'math' || !block.expression.trim()) continue;
@@ -25,7 +27,7 @@ self.onmessage = function(e) {
         ? { ...formatted, error: false }
         : { numStr: '', unitStr: '', error: false };
 
-      // FIX: Serialize the MathJS object to prevent DataCloneError crashes
+      // Serialize the MathJS object to prevent DataCloneError crashes
       if (result?.isUnit) {
         newRaw[block.id] = {
           value: result.value,

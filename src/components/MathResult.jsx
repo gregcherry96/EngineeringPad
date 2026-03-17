@@ -1,66 +1,116 @@
-import React, { useState } from 'react';
-import UnitEditor from './UnitEditor';
+import React, { useState, useRef, useEffect } from 'react';
+import { useWorkspaceActionData } from '../WorkspaceContext';
 
 export default function MathResult({ id, res, isStale }) {
-  const [copied, setCopied] = useState(false);
+  const { actions } = useWorkspaceActionData();
+  const [isEditingUnit, setIsEditingUnit] = useState(false);
+  const [tempUnit, setTempUnit] = useState('');
+  const inputRef = useRef(null);
 
-  const copyToClipboard = (e) => {
-    e.stopPropagation();
+  // Auto-focus the input when entering edit mode
+  useEffect(() => {
+    if (isEditingUnit && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select(); // Highlight existing unit for quick overwrite
+    }
+  }, [isEditingUnit]);
 
-    if (!res.numStr) return;
-
-    const raw = res.numStr
-      .replace(/\s×\s10/g, 'e')
-      .replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹⁻]/g, c => '⁰¹²³⁴⁵⁶⁷⁸⁹⁻'.indexOf(c).toString().replace('10', '-'));
-    navigator.clipboard?.writeText(raw);
-
-    // Step 1: Provide visual feedback for copying
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  };
+  if (!res || (!res.numStr && !res.error)) return null;
 
   if (res.error) {
-    if (res.errorLabel === 'unit error') {
-      return (
-        <span className={`d-flex align-items-baseline gap-1 ms-2 transition-opacity duration-150 ${isStale ? 'opacity-50' : 'opacity-100'}`}>
-          <span className="math-result-equals">=</span>
-          <span
-            className={`math-result-num ${copied ? 'text-success transition-colors duration-150' : ''}`}
-            onClick={copyToClipboard}
-            title="Copy base value"
-            style={{ cursor: 'pointer' }}
-          >
-            {res.numStr} {copied && <span className="ms-1" style={{ fontSize: '0.8em' }}>✓</span>}
-          </span>
-          <UnitEditor id={id} unitStr={res.unitStr} isError={true} />
-        </span>
-      );
-    }
-
     return (
-      <span
-        className={`badge bg-danger ms-2 transition-opacity duration-150 ${isStale ? 'opacity-50' : 'opacity-100'}`}
+      <div
+        className="math-result text-danger d-flex align-items-center user-select-none"
+        style={{ marginLeft: '12px', fontSize: '0.9em', fontWeight: '500', cursor: 'help' }}
         title={res.errorMsg}
       >
-        {res.errorLabel ?? 'error'}
-      </span>
+        <span className="me-1" aria-hidden="true">⚠️</span>
+        {res.errorLabel}
+      </div>
     );
   }
 
-  if (!res.numStr) return null;
+  const handleUnitClick = () => {
+    setTempUnit(res.unitStr || '');
+    setIsEditingUnit(true);
+  };
+
+  const handleUnitSubmit = () => {
+    // If empty, it removes the override and goes back to standard SI base
+    const finalUnit = tempUnit.trim();
+
+    if (finalUnit === res.unitStr) {
+      setIsEditingUnit(false);
+      return;
+    }
+
+    const result = actions.unitChange(id, finalUnit);
+
+    if (result?.ok) {
+      setIsEditingUnit(false);
+    } else {
+      // If conversion fails (incompatible or misspelled unit), revert UI to safe state
+      setIsEditingUnit(false);
+    }
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleUnitSubmit();
+    }
+    if (e.key === 'Escape') {
+      setIsEditingUnit(false);
+    }
+  };
 
   return (
-    <span className={`d-flex align-items-baseline gap-1 ms-2 transition-opacity duration-150 ${isStale ? 'opacity-50' : 'opacity-100'}`}>
-      <span className="math-result-equals">=</span>
-      <span
-        className={`math-result-num ${copied ? 'text-success transition-colors duration-150' : ''}`}
-        onClick={copyToClipboard}
-        title="Copy value"
-        style={{ cursor: 'pointer' }}
-      >
-        {res.numStr} {copied && <span className="ms-1" style={{ fontSize: '0.8em' }}>✓</span>}
-      </span>
-      {res.unitStr && <UnitEditor id={id} unitStr={res.unitStr} />}
-    </span>
+    <div
+      className="math-result d-flex align-items-center"
+      style={{
+        marginLeft: '12px',
+        fontSize: '1.1em',
+        color: '#28a745',
+        transition: 'opacity 0.2s ease, filter 0.2s ease',
+        opacity: isStale ? 0.4 : 1,
+        filter: isStale ? 'grayscale(80%)' : 'none'
+      }}
+    >
+      {res.numStr && (
+        <>
+          <span className="me-1">= {res.numStr}</span>
+
+          {isEditingUnit ? (
+            <input
+              ref={inputRef}
+              value={tempUnit}
+              onChange={(e) => setTempUnit(e.target.value)}
+              onBlur={handleUnitSubmit}
+              onKeyDown={handleKeyDown}
+              className="form-control form-control-sm text-muted"
+              style={{
+                width: `${Math.max(60, tempUnit.length * 10 + 20)}px`, // Auto-scale width slightly
+                padding: '0 4px',
+                height: '24px',
+                fontSize: '0.9em',
+                background: '#f8f9fa',
+                boxShadow: 'none',
+                borderColor: '#ccc'
+              }}
+            />
+          ) : (
+            res.unitStr && (
+              <span
+                className="text-muted unit-badge"
+                onClick={handleUnitClick}
+                title="Click to change unit"
+              >
+                {res.unitStr}
+              </span>
+            )
+          )}
+        </>
+      )}
+    </div>
   );
 }

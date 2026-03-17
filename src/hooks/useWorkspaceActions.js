@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { GRID_SIZE } from '../utils/canvasConfig';
+import { GRID_SIZE, CURSOR_Y_OFFSET } from '../utils/canvasConfig'; // Imported new constant
 
 export function useWorkspaceActions({
   setBlocks, pushUndo, clearHistory,
@@ -20,9 +20,7 @@ export function useWorkspaceActions({
   const handleTransform = useCallback((id, type) =>
     updateBlocks(p => p.map(b => b.id === id ? { ...b, type, expression: '' } : b)), [updateBlocks]);
 
-  const handleDrag = useCallback((id, dx, dy) => {
-    // setActiveDrag logic usually stays in provider state, but we call it here if needed
-  }, []);
+  const handleDrag = useCallback((id, dx, dy) => {}, []);
 
   const handleDragStop = useCallback((id, dx, dy, setActiveDrag) => {
     setActiveDrag(null);
@@ -53,19 +51,16 @@ export function useWorkspaceActions({
       setUnitOverrides(p => { const n = { ...p }; delete n[id]; return n; });
       return { ok: true };
     }
-    const raw = rawResultsRef.current[id];
-    if (!raw) return { ok: false };
-    try {
-      convertResult(raw, targetUnit);
-      setUnitOverrides(p => ({ ...p, [id]: targetUnit }));
-      return { ok: true };
-    } catch { return { ok: false }; }
-  }, [rawResultsRef, setUnitOverrides, convertResult]);
+
+    setUnitOverrides(p => ({ ...p, [id]: targetUnit }));
+    return { ok: true };
+
+  }, [setUnitOverrides]);
 
   const handleEnter = useCallback((id) => {
     const cur = blocksRef.current.find(b => b.id === id);
     if (!cur) return;
-    setCursorPos({ x: cur.x, y: cur.y + 60 });
+    setCursorPos({ x: cur.x, y: cur.y + CURSOR_Y_OFFSET }); // Updated
     setSelectedIds([]);
   }, [blocksRef, setCursorPos, setSelectedIds]);
 
@@ -76,7 +71,7 @@ export function useWorkspaceActions({
     if (key === 'Tab' || key === 'ShiftTab') {
       const nextIdx = key === 'Tab' ? idx + 1 : idx - 1;
       if (sorted[nextIdx]) { setSelectedIds([sorted[nextIdx].id]); setCursorPos(null); }
-      else { setCursorPos({ x: sorted[idx].x, y: sorted[idx].y + 60 }); setSelectedIds([]); }
+      else { setCursorPos({ x: sorted[idx].x, y: sorted[idx].y + CURSOR_Y_OFFSET }); setSelectedIds([]); } // Updated
       return;
     }
     setSelectedIds([]);

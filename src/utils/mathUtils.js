@@ -12,7 +12,10 @@ export function convertResult(rawResult, targetUnit) {
 }
 
 export function formatNum(n) {
+  // Step 4: Ensure proper handling of NaN explicitly
+  if (Number.isNaN(n)) return 'NaN';
   if (n === null || n === undefined || !isFinite(n)) return String(n);
+
   const abs = Math.abs(n);
   if (abs !== 0 && (abs >= 1e7 || abs < 1e-4)) {
     const [coeff, exp] = n.toExponential(4).replace(/\.?0+e/, 'e').split('e');
@@ -22,7 +25,9 @@ export function formatNum(n) {
 }
 
 export function buildUnitStr(unitObj) {
-  if (!unitObj?.units?.length) return '';
+  // Step 4: Handle cases where unitObj.units might be undefined cleanly before iterating
+  if (!unitObj?.units || !Array.isArray(unitObj.units) || unitObj.units.length === 0) return '';
+
   const pos = [], neg = [];
   for (const t of unitObj.units) {
     const token = (t.prefix?.name ?? '') + (t.unit?.name ?? '');
