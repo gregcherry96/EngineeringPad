@@ -28,10 +28,18 @@ function AppContent() {
   return (
     <div className="d-flex flex-column vh-100 vw-100 overflow-hidden">
       <Toolbar
-        onUndo={undo} onRedo={redo} canUndo={canUndo} canRedo={canRedo} onClear={actions.clearWorkspace}
-        zoom={zoom} onZoomChange={(val) => val === 'reset' ? setZoom(1) : setZoom(z => Math.max(0.3, Math.min(3, z + val)))}
-        showGrid={showGrid} onToggleGrid={() => setShowGrid(!showGrid)}
-        paperMode={paperMode} onTogglePaper={() => setPaperMode(!paperMode)}
+        onUndo={undo}
+        onRedo={redo}
+        canUndo={canUndo}
+        canRedo={canRedo}
+        onClear={actions.clearWorkspace}
+        onLoadWorkspace={actions.loadWorkspace} // Step 4: Pass load capability
+        zoom={zoom}
+        onZoomChange={(val) => val === 'reset' ? setZoom(1) : setZoom(z => Math.max(0.3, Math.min(3, z + val)))}
+        showGrid={showGrid}
+        onToggleGrid={() => setShowGrid(!showGrid)}
+        paperMode={paperMode}
+        onTogglePaper={() => setPaperMode(!paperMode)}
         onAddPage={() => setPageCount(p => p + 1)}
         onRemovePage={() => setPageCount(p => Math.max(1, p - 1))}
         pageCount={pageCount}

@@ -8,9 +8,11 @@ export default function CanvasArea({
   zoom, startPan, pan, stopPan, isPanning, spaceHeld, graphPaperRef,
   showGrid, paperMode, pageCount
 }) {
+  // Corrected: Split the context hooks properly!
   const { blocks, results } = useWorkspaceData();
   const { selectedIds, cursorPos } = useWorkspaceInteraction();
   const { actions, updateBlocks } = useWorkspaceActionData();
+
   const [marquee, setMarquee] = useState(null);
   const canvasRef = useRef(null);
 
@@ -26,7 +28,7 @@ export default function CanvasArea({
 
     const { x, y } = canvasToWorld(e.clientX, e.clientY);
 
-    // Step 3: Snapshot existing selection if Shift is held
+    // Snapshot existing selection if Shift is held
     setMarquee({ startX: x, startY: y, endX: x, endY: y, initialSelection: e.shiftKey ? selectedIds : [] });
 
     if (!e.shiftKey) {
@@ -85,7 +87,7 @@ export default function CanvasArea({
         );
       })()}
 
-      {/* Step 2: Empty Canvas Helper Text */}
+      {/* Empty Canvas Helper Text */}
       {blocks.length === 0 && !cursorPos && (
         <div
           className="position-absolute top-50 start-50 translate-middle text-muted user-select-none opacity-50 text-center"
@@ -96,7 +98,7 @@ export default function CanvasArea({
         </div>
       )}
 
-      {blocks.map(block => <BlockWrapper key={block.id} block={block} res={results[block.id] ?? {}} />)}
+      {blocks.map(block => <BlockWrapper key={block.id} block={block} res={results?.[block.id] ?? {}} />)}
     </>
   );
 
@@ -111,7 +113,19 @@ export default function CanvasArea({
     >
       {paperMode ? (
         <div className="d-flex justify-content-center" style={{ minWidth: `${a4.width * zoom + 80}px`, minHeight: `${a4.height * pageCount * zoom + 80}px`, padding: '40px' }}>
-          <div ref={canvasRef} className={`canvas-area a4-paper shadow ${showGrid ? 'grid-bg' : ''}`} style={{ transform: `scale(${zoom})`, width: `${a4.width}px`, height: `${a4.height * pageCount}px`, flexShrink: 0 }}>
+          <div
+            ref={canvasRef}
+            className={`canvas-area a4-paper shadow ${showGrid ? 'grid-bg' : ''}`}
+            style={{
+              transform: `scale(${zoom})`,
+              width: `${a4.width}px`,
+              height: `${a4.height * pageCount}px`,
+              flexShrink: 0,
+              // Visual Page Breaks
+              backgroundImage: pageCount > 1 ? `linear-gradient(to bottom, transparent calc(100% - 1px), #ccc calc(100% - 1px))` : 'none',
+              backgroundSize: `100% ${a4.height}px`
+            }}
+          >
             {canvasContent}
           </div>
         </div>

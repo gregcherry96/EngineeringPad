@@ -1,29 +1,33 @@
 import React, { useEffect, useRef, useImperativeHandle, forwardRef } from 'react';
-import 'mathlive';
+import { MathfieldElement } from 'mathlive';
 
-const MathFieldWrapper = forwardRef(({ value, onInput, onFocusIn, onFocusOut, onKeyDown, style }, ref) => {
+MathfieldElement.fontsDirectory = 'https://cdn.jsdelivr.net/npm/mathlive@0.109.0/dist/fonts';
+MathfieldElement.soundsDirectory = 'https://cdn.jsdelivr.net/npm/mathlive@0.109.0/dist/sounds';
+
+const MathFieldWrapper = forwardRef(({ value, latex, onInput, onFocusIn, onFocusOut, onKeyDown, style }, ref) => {
   const mathFieldRef = useRef(null);
 
-  // Expose the underlying web component instance to the parent ref
   useImperativeHandle(ref, () => mathFieldRef.current);
 
-  // Store callbacks in a ref to prevent re-attaching event listeners on every render
   const callbacksRef = useRef({ onInput, onFocusIn, onFocusOut, onKeyDown });
   useEffect(() => {
     callbacksRef.current = { onInput, onFocusIn, onFocusOut, onKeyDown };
   });
 
-  // Effect 1: Handle setting the initial value when the component mounts/updates
+  // Step 1: Load native LaTeX if we have it, fallback to ascii-math
   useEffect(() => {
     const mf = mathFieldRef.current;
-    if (mf && value && !mf.getValue()) {
-      mf.setValue(value);
-      setTimeout(() => mf.focus(), 50);
+    if (mf && !mf.getValue()) {
+      if (latex) {
+        mf.value = latex;
+        setTimeout(() => mf.focus(), 50);
+      } else if (value) {
+        mf.setValue(value, { format: 'ascii-math' });
+        setTimeout(() => mf.focus(), 50);
+      }
     }
-  }, [value]);
+  }, [value, latex]);
 
-  // Effect 2: Attach DOM event listeners strictly ONCE
-  // Step 1: Empty dependency array guarantees no wasteful unmount/remount cycles
   useEffect(() => {
     const mf = mathFieldRef.current;
     if (!mf) return;

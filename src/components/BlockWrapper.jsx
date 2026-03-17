@@ -8,7 +8,6 @@ import SectionBlock from './SectionBlock';
 const GRID_SIZE = 20;
 
 function BlockWrapper({ block, res }) {
-  // Use isolated contexts so this only re-renders when relevant interactions/refs change.
   const { selectedIds, activeDrag } = useWorkspaceInteraction();
   const { actions } = useWorkspaceActionData();
   const [isFocused, setIsFocused] = useState(false);
@@ -28,41 +27,44 @@ function BlockWrapper({ block, res }) {
   };
 
   const wrapperClass = [
-    'math-wrapper rounded px-2 py-1 d-flex align-items-center gap-2 border',
+    'math-wrapper rounded px-2 py-1 d-flex align-items-center gap-2 border w-100', // Added w-100 to fill Rnd box
     isFocused ? 'focused bg-white border-primary' : (isSelected ? 'border-secondary bg-white bg-opacity-75 shadow-sm' : 'border-transparent bg-transparent'),
     hasError && !isFocused && 'has-error bg-danger bg-opacity-10 border-danger'
   ].filter(Boolean).join(' ');
 
+  // Step 3: Resizing Logic
+  const isResizable = block.type === 'text' || block.type === 'section';
+  const defaultWidth = block.type === 'section' ? 600 : 400;
+
   return (
     <Rnd
       position={{ x: displayX, y: displayY }}
+      // Apply custom sizing only if it's a resizable block
+      {...(isResizable ? { size: { width: block.width || defaultWidth, height: 'auto' } } : {})}
       onDragStart={(e) => {
-        if (!isSelected) {
-          actions.select(e.shiftKey ? [...selectedIds, block.id] : [block.id]);
-        }
+        if (!isSelected) actions.select(e.shiftKey ? [...selectedIds, block.id] : [block.id]);
       }}
-      onDrag={(e, d) => {
-        actions.drag(block.id, d.x - block.x, d.y - block.y);
-      }}
+      onDrag={(e, d) => actions.drag(block.id, d.x - block.x, d.y - block.y)}
       onDragStop={(e, d) => {
         const dx = Math.round((d.x - block.x) / GRID_SIZE) * GRID_SIZE;
         const dy = Math.round((d.y - block.y) / GRID_SIZE) * GRID_SIZE;
         actions.dragStop(block.id, dx, dy);
       }}
-      enableResizing={false}
+      // Step 3: Enable the right drag-handle for text blocks
+      enableResizing={isResizable ? { right: true } : false}
+      onResizeStop={(e, dir, ref) => {
+        if (isResizable) actions.resize(block.id, ref.offsetWidth);
+      }}
       dragGrid={[GRID_SIZE, GRID_SIZE]}
       cancel="input, textarea, math-field, .math-result-unit--clickable"
       style={{ position: 'absolute', zIndex: isFocused || isSelected ? 20 : 10 }}
     >
       <div
         id={`block-container-${block.id}`}
-        className="block-container position-relative d-flex align-items-start"
-        onMouseDown={(e) => {
-          mouseDownPos.current = { x: e.clientX, y: e.clientY };
-        }}
+        className="block-container position-relative d-flex align-items-start w-100 h-100"
+        onMouseDown={(e) => { mouseDownPos.current = { x: e.clientX, y: e.clientY }; }}
         onClick={(e) => {
           e.stopPropagation();
-
           const dx = Math.abs(e.clientX - mouseDownPos.current.x);
           const dy = Math.abs(e.clientY - mouseDownPos.current.y);
           if (dx > 5 || dy > 5) return;
@@ -76,7 +78,7 @@ function BlockWrapper({ block, res }) {
         style={{ cursor: isFocused ? 'default' : 'grab' }}
       >
         <div className={wrapperClass}>
-          {block.type === 'math' && <MathBlock id={block.id} initialValue={block.expression} setFocus={handleFocus} res={res} />}
+          {block.type === 'math' && <MathBlock id={block.id} initialValue={block.expression} initialLatex={block.latex} setFocus={handleFocus} res={res} />}
           {block.type === 'text' && <TextBlock id={block.id} initialValue={block.expression} setFocus={handleFocus} res={res} />}
           {block.type === 'section' && <SectionBlock id={block.id} initialValue={block.expression} setFocus={handleFocus} res={res} />}
         </div>
@@ -85,9 +87,5 @@ function BlockWrapper({ block, res }) {
   );
 }
 
-// Memoized Wrapper
-const wrapperAreEqual = (prev, next) => {
-  return prev.block === next.block && prev.res === next.res;
-};
-
+const wrapperAreEqual = (prev, next) => prev.block === next.block && prev.res === next.res;
 export default memo(BlockWrapper, wrapperAreEqual);

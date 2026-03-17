@@ -7,7 +7,6 @@ export function useMathEvaluation(blocks, unitOverrides, setUnitOverrides) {
   const workerRef = useRef(null);
 
   useEffect(() => {
-    // Instantiate worker
     workerRef.current = new Worker(new URL('../workers/mathWorker.js', import.meta.url), {
       type: 'module'
     });
@@ -21,7 +20,7 @@ export function useMathEvaluation(blocks, unitOverrides, setUnitOverrides) {
     };
 
     return () => workerRef.current.terminate();
-  }, []);
+  }, []); // Cleaned up dependency array
 
   useEffect(() => {
     const timerId = setTimeout(() => {

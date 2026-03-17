@@ -14,35 +14,24 @@ export default function TextBlock({ id, initialValue, setFocus }) {
     }
   };
 
-  // Step 4: Robust resizing via LayoutEffect when value updates remotely
-  useLayoutEffect(() => {
-    adjustHeight();
-  }, [initialValue]);
+  useLayoutEffect(() => { adjustHeight(); }, [initialValue]);
 
   useEffect(() => {
-    // Focus automatically on creation
     if (inputRef.current && document.activeElement !== inputRef.current) {
       inputRef.current.focus();
       inputRef.current.setSelectionRange(initialValue.length, initialValue.length);
     }
-
-    // Connect ResizeObserver to catch window scaling or font loading changes
     const resizeObserver = new ResizeObserver(() => adjustHeight());
     if (inputRef.current) resizeObserver.observe(inputRef.current);
-
     return () => resizeObserver.disconnect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Only run once on mount
+  }, [initialValue.length]);
 
   const handleKeyDown = (e) => {
     if (e.key === 'Escape') { e.preventDefault(); inputRef.current?.blur(); actions.leaveBlock(id, 'Escape'); return; }
     if (e.key === 'Tab') { e.preventDefault(); inputRef.current?.blur(); actions.leaveBlock(id, e.shiftKey ? 'ShiftTab' : 'Tab'); return; }
     if (e.key.startsWith('Arrow') && !inputRef.current.value) { e.preventDefault(); inputRef.current?.blur(); actions.delete(id); actions.leaveBlock(id, e.key); return; }
-
-    // Enter (without shift) drops focus below block
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); inputRef.current?.blur(); actions.enter(id); return; }
 
-    // Nudge
     if (e.key.startsWith('Arrow') && (e.ctrlKey || e.metaKey || !inputRef.current.value)) {
       e.preventDefault();
       const D = { ArrowUp: [0, -GRID_SIZE], ArrowDown: [0, GRID_SIZE], ArrowLeft: [-GRID_SIZE, 0], ArrowRight: [GRID_SIZE, 0] };
@@ -54,10 +43,10 @@ export default function TextBlock({ id, initialValue, setFocus }) {
     <textarea
       ref={inputRef}
       className="form-control border-0 bg-transparent text-dark p-0 shadow-none m-0"
-      style={{ width: '400px', resize: 'none', fontFamily: 'Lora, serif', fontSize: '1rem', lineHeight: '1.5', overflow: 'hidden' }}
+      // Step 3: Change width to 100% so it perfectly hugs the resizable Rnd container
+      style={{ width: '100%', resize: 'none', fontFamily: 'Lora, serif', fontSize: '1rem', lineHeight: '1.5', overflow: 'hidden' }}
       value={initialValue}
       onChange={e => {
-        // Also adjust height immediately on keypress to prevent visual flickering
         adjustHeight();
         actions.change(id, e.target.value);
       }}

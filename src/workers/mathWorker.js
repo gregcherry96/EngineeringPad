@@ -25,7 +25,7 @@ self.onmessage = function(e) {
         ? { ...formatted, error: false }
         : { numStr: '', unitStr: '', error: false };
 
-      // Step 1: Prevent DataCloneError by mapping MathJS Unit properties to a safe plain object
+      // FIX: Serialize the MathJS object to prevent DataCloneError crashes
       if (result?.isUnit) {
         newRaw[block.id] = {
           value: result.value,
@@ -38,7 +38,6 @@ self.onmessage = function(e) {
         try {
           newResults[block.id] = { ...convertResult(result, ov), error: false };
         } catch {
-          // Worker cannot call setUnitOverrides directly; UI will handle cleanup
           newResults[block.id].error = true;
           newResults[block.id].errorLabel = 'unit error';
         }

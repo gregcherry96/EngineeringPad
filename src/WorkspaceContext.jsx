@@ -6,7 +6,7 @@ export const WorkspaceDataContext = createContext({});
 export const WorkspaceInteractionContext = createContext({});
 export const WorkspaceActionsContext = createContext({});
 
-export const makeBlock = (x, y, type = 'math') => ({ id: crypto.randomUUID(), x, y, type, expression: '' });
+export const makeBlock = (x, y, type = 'math') => ({ id: crypto.randomUUID(), x, y, type, expression: '', latex: '' });
 
 export function useWorkspaceData() { return useContext(WorkspaceDataContext); }
 export function useWorkspaceInteraction() { return useContext(WorkspaceInteractionContext); }
@@ -30,7 +30,16 @@ export function WorkspaceProvider({ children }) {
   };
 
   const { state: blocks, setState: setBlocks, pushUndo, undo, redo, canUndo, canRedo, clearHistory } = useHistory(getInitialBlocks());
-  const [unitOverrides, setUnitOverrides] = useState({});
+
+  const getInitialOverrides = () => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('mathpad-session'));
+      if (saved?.savedOverrides) return saved.savedOverrides;
+    } catch (e) {}
+    return {};
+  };
+
+  const [unitOverrides, setUnitOverrides] = useState(getInitialOverrides());
   const [activeDrag, setActiveDrag] = useState(null);
   const [cursorPos, setCursorPos] = useState(null);
   const [selectedIds, setSelectedIdsState] = useState([]);
@@ -60,8 +69,18 @@ export function WorkspaceProvider({ children }) {
   const actions = useMemo(() => ({
     ...actionsHook,
     drag: (id, dx, dy) => { if (selectedIdsRef.current.includes(id)) setActiveDrag({ id, dx, dy }); },
-    dragStop: (id, dx, dy) => actionsHook.dragStop(id, dx, dy, setActiveDrag)
-  }), [actionsHook]);
+    dragStop: (id, dx, dy) => actionsHook.dragStop(id, dx, dy, setActiveDrag),
+    // Step 1 & 3: New Actions for perfect rendering and resizing
+    resize: (id, width) => actionsHook.updateBlocks(p => p.map(b => b.id === id ? { ...b, width } : b), true),
+    changeMath: (id, expression, latex) => actionsHook.updateBlocks(p => p.map(b => b.id === id ? { ...b, expression, latex } : b), true),
+    loadWorkspace: (newBlocks, newOverrides = {}) => {
+      setBlocks(newBlocks);
+      setUnitOverrides(newOverrides);
+      setSelectedIds([]);
+      clearHistory();
+      pushUndo(newBlocks);
+    }
+  }), [actionsHook, setBlocks, clearHistory, pushUndo, setSelectedIds]);
 
   useEffect(() => {
     const timerId = setTimeout(() => {

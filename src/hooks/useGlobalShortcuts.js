@@ -24,7 +24,14 @@ export function useGlobalShortcuts({
 
       if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); undo(); }
       if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'z'))) { e.preventDefault(); redo(); }
-      if (e.code === 'Space') { e.preventDefault(); spaceHeld.current = true; graphPaperRef.current?.classList.add('panning-mode'); }
+
+      // Step 2: Global cursor feedback for panning
+      if (e.code === 'Space') {
+        e.preventDefault();
+        spaceHeld.current = true;
+        graphPaperRef.current?.classList.add('panning-mode');
+        document.body.style.cursor = 'grab';
+      }
 
       // Create new blocks based on shortcuts
       if (cursorPos && e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
@@ -47,6 +54,7 @@ export function useGlobalShortcuts({
       if (e.code === 'Space') {
         spaceHeld.current = false;
         graphPaperRef.current?.classList.remove('panning-mode');
+        document.body.style.cursor = ''; // Step 2: Revert cursor
       }
     };
 
@@ -56,6 +64,7 @@ export function useGlobalShortcuts({
     return () => {
       window.removeEventListener('keydown', handleKey);
       window.removeEventListener('keyup', handleKeyUp);
+      document.body.style.cursor = ''; // Safety cleanup
     };
   }, [cursorPos, undo, redo, blocks, selectedIds, actions, updateBlocks, spaceHeld, graphPaperRef]);
 }
