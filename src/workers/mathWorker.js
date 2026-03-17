@@ -25,7 +25,13 @@ self.onmessage = function(e) {
         ? { ...formatted, error: false }
         : { numStr: '', unitStr: '', error: false };
 
-      if (result?.isUnit) newRaw[block.id] = result;
+      // Step 1: Prevent DataCloneError by mapping MathJS Unit properties to a safe plain object
+      if (result?.isUnit) {
+        newRaw[block.id] = {
+          value: result.value,
+          unit: typeof result.formatUnits === 'function' ? result.formatUnits() : result.toString()
+        };
+      }
 
       const ov = unitOverrides?.[block.id];
       if (ov && result?.isUnit) {

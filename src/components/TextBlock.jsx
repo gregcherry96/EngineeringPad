@@ -1,10 +1,10 @@
-import React, { useEffect, useRef } from 'react';
-import { useWorkspaceData } from '../WorkspaceContext';
+import React, { useEffect, useLayoutEffect, useRef } from 'react';
+import { useWorkspaceActionData } from '../WorkspaceContext';
 
 const GRID_SIZE = 20;
 
 export default function TextBlock({ id, initialValue, setFocus }) {
-  const { actions } = useWorkspaceData();
+  const { actions } = useWorkspaceActionData();
   const inputRef = useRef(null);
 
   const adjustHeight = () => {
@@ -14,13 +14,25 @@ export default function TextBlock({ id, initialValue, setFocus }) {
     }
   };
 
+  // Step 4: Robust resizing via LayoutEffect when value updates remotely
+  useLayoutEffect(() => {
+    adjustHeight();
+  }, [initialValue]);
+
   useEffect(() => {
-    if (inputRef.current) {
+    // Focus automatically on creation
+    if (inputRef.current && document.activeElement !== inputRef.current) {
       inputRef.current.focus();
       inputRef.current.setSelectionRange(initialValue.length, initialValue.length);
-      adjustHeight();
     }
-  }, [initialValue.length]);
+
+    // Connect ResizeObserver to catch window scaling or font loading changes
+    const resizeObserver = new ResizeObserver(() => adjustHeight());
+    if (inputRef.current) resizeObserver.observe(inputRef.current);
+
+    return () => resizeObserver.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run once on mount
 
   const handleKeyDown = (e) => {
     if (e.key === 'Escape') { e.preventDefault(); inputRef.current?.blur(); actions.leaveBlock(id, 'Escape'); return; }
@@ -44,7 +56,11 @@ export default function TextBlock({ id, initialValue, setFocus }) {
       className="form-control border-0 bg-transparent text-dark p-0 shadow-none m-0"
       style={{ width: '400px', resize: 'none', fontFamily: 'Lora, serif', fontSize: '1rem', lineHeight: '1.5', overflow: 'hidden' }}
       value={initialValue}
-      onChange={e => { adjustHeight(); actions.change(id, e.target.value); }}
+      onChange={e => {
+        // Also adjust height immediately on keypress to prevent visual flickering
+        adjustHeight();
+        actions.change(id, e.target.value);
+      }}
       onKeyDown={handleKeyDown}
       onFocus={() => setFocus(true)}
       onBlur={() => { setFocus(false); if (!inputRef.current?.value.trim()) actions.delete(id); }}

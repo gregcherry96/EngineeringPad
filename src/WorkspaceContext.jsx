@@ -1,21 +1,23 @@
 import React, { createContext, useContext, useState, useRef, useMemo, useEffect, useCallback } from 'react';
-import { useHistory } from './hooks';
-import { useMathEvaluation } from './hooks/useMathEvaluation';
+import { useHistory, useMathEvaluation, useWorkspaceActions } from './hooks/index.js';
 import { convertResult } from './utils/mathUtils';
-import { useWorkspaceActions } from './hooks/useWorkspaceActions';
 
 export const WorkspaceDataContext = createContext({});
 export const WorkspaceInteractionContext = createContext({});
+export const WorkspaceActionsContext = createContext({});
 
-// Helper for other components to create new blocks
 export const makeBlock = (x, y, type = 'math') => ({ id: crypto.randomUUID(), x, y, type, expression: '' });
 
 export function useWorkspaceData() { return useContext(WorkspaceDataContext); }
 export function useWorkspaceInteraction() { return useContext(WorkspaceInteractionContext); }
+export function useWorkspaceActionData() { return useContext(WorkspaceActionsContext); }
 
-// Combined hook to prevent errors in components still using useWorkspace
 export function useWorkspace() {
-  return { ...useContext(WorkspaceDataContext), ...useContext(WorkspaceInteractionContext) };
+  return {
+    ...useContext(WorkspaceDataContext),
+    ...useContext(WorkspaceInteractionContext),
+    ...useContext(WorkspaceActionsContext)
+  };
 }
 
 export function WorkspaceProvider({ children }) {
@@ -69,19 +71,24 @@ export function WorkspaceProvider({ children }) {
   }, [blocks, unitOverrides]);
 
   const dataState = useMemo(() => ({
-    blocks, results, rawResultsRef, unitOverrides, userVars,
-    undo, redo, canUndo, canRedo, updateBlocks: actions.updateBlocks, actions, activeMathFieldRef
-  }), [blocks, results, unitOverrides, userVars, undo, redo, canUndo, canRedo, actions]);
+    blocks, results, rawResultsRef, unitOverrides, userVars
+  }), [blocks, results, unitOverrides, userVars]);
+
+  const actionsState = useMemo(() => ({
+    undo, redo, canUndo, canRedo, updateBlocks: actions.updateBlocks, actions
+  }), [undo, redo, canUndo, canRedo, actions]);
 
   const interactionState = useMemo(() => ({
-    selectedIds, activeDrag, cursorPos, actions, activeMathFieldRef
-  }), [selectedIds, activeDrag, cursorPos, actions]);
+    selectedIds, activeDrag, cursorPos, activeMathFieldRef
+  }), [selectedIds, activeDrag, cursorPos]);
 
   return (
     <WorkspaceDataContext.Provider value={dataState}>
-      <WorkspaceInteractionContext.Provider value={interactionState}>
-        {children}
-      </WorkspaceInteractionContext.Provider>
+      <WorkspaceActionsContext.Provider value={actionsState}>
+        <WorkspaceInteractionContext.Provider value={interactionState}>
+          {children}
+        </WorkspaceInteractionContext.Provider>
+      </WorkspaceActionsContext.Provider>
     </WorkspaceDataContext.Provider>
   );
 }

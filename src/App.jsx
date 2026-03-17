@@ -1,18 +1,14 @@
 import { useState, useRef } from 'react';
-import { usePanZoom } from './hooks';
-import { WorkspaceProvider, useWorkspaceData, useWorkspaceInteraction } from './WorkspaceContext';
+import { usePanZoom, useGlobalShortcuts } from './hooks/index.js';
+import { WorkspaceProvider, useWorkspaceData, useWorkspaceInteraction, useWorkspaceActionData } from './WorkspaceContext';
 import Sidebar from './components/Sidebar';
 import Toolbar from './components/Toolbar';
 import CanvasArea from './components/CanvasArea';
-import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
 import './App.css';
 
 function AppContent() {
-  const {
-    blocks, undo, redo, canUndo, canRedo, updateBlocks, userVars,
-    actions
-  } = useWorkspaceData();
-
+  const { blocks, userVars } = useWorkspaceData();
+  const { undo, redo, canUndo, canRedo, updateBlocks, actions } = useWorkspaceActionData();
   const { selectedIds, cursorPos, activeMathFieldRef } = useWorkspaceInteraction();
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);

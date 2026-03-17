@@ -13,14 +13,20 @@ const MathFieldWrapper = forwardRef(({ value, onInput, onFocusIn, onFocusOut, on
     callbacksRef.current = { onInput, onFocusIn, onFocusOut, onKeyDown };
   });
 
+  // Effect 1: Handle setting the initial value when the component mounts/updates
   useEffect(() => {
     const mf = mathFieldRef.current;
-    if (!mf) return;
-
-    if (value && !mf.getValue()) {
+    if (mf && value && !mf.getValue()) {
       mf.setValue(value);
       setTimeout(() => mf.focus(), 50);
     }
+  }, [value]);
+
+  // Effect 2: Attach DOM event listeners strictly ONCE
+  // Step 1: Empty dependency array guarantees no wasteful unmount/remount cycles
+  useEffect(() => {
+    const mf = mathFieldRef.current;
+    if (!mf) return;
 
     const handleInput = (e) => callbacksRef.current.onInput?.(e, mf);
     const handleFocusIn = (e) => callbacksRef.current.onFocusIn?.(e, mf);
@@ -38,7 +44,7 @@ const MathFieldWrapper = forwardRef(({ value, onInput, onFocusIn, onFocusOut, on
       mf.removeEventListener('focusout', handleFocusOut);
       mf.removeEventListener('keydown', handleKeyDown);
     };
-  }, [value]); // Bind DOM listeners once, callbacks are kept fresh via refs
+  }, []);
 
   return <math-field ref={mathFieldRef} style={style} />;
 });

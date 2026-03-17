@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { useWorkspaceData, useWorkspaceInteraction } from '../WorkspaceContext';
+import { useWorkspaceData, useWorkspaceInteraction, useWorkspaceActionData } from '../WorkspaceContext';
 import BlockWrapper from './BlockWrapper';
 import { GRID_SIZE, PAPER_SIZES } from '../utils/canvasConfig';
 import { calculateWorldCoordinates, calculateMarqueeBounds } from '../utils/canvasUtils';
@@ -8,8 +8,9 @@ export default function CanvasArea({
   zoom, startPan, pan, stopPan, isPanning, spaceHeld, graphPaperRef,
   showGrid, paperMode, pageCount
 }) {
-  const { blocks, updateBlocks, actions } = useWorkspaceData();
+  const { blocks, results } = useWorkspaceData();
   const { selectedIds, cursorPos } = useWorkspaceInteraction();
+  const { actions, updateBlocks } = useWorkspaceActionData();
   const [marquee, setMarquee] = useState(null);
   const canvasRef = useRef(null);
 
@@ -24,8 +25,13 @@ export default function CanvasArea({
     if (paperMode && !e.target.closest('.canvas-area')) return;
 
     const { x, y } = canvasToWorld(e.clientX, e.clientY);
-    setMarquee({ startX: x, startY: y, endX: x, endY: y });
-    actions.select([]);
+
+    // Step 3: Snapshot existing selection if Shift is held
+    setMarquee({ startX: x, startY: y, endX: x, endY: y, initialSelection: e.shiftKey ? selectedIds : [] });
+
+    if (!e.shiftKey) {
+      actions.select([]);
+    }
     actions.setCursorPos(null);
   };
 
@@ -41,7 +47,8 @@ export default function CanvasArea({
         b.x < bounds.maxX && b.x + 100 > bounds.minX && b.y < bounds.maxY && b.y + 40 > bounds.minY
       ).map(b => b.id);
 
-      actions.select(newlySelected);
+      // Merge initial selection with the new box bounds to allow additive selection
+      actions.select([...new Set([...marquee.initialSelection, ...newlySelected])]);
     }
   };
 
@@ -77,14 +84,26 @@ export default function CanvasArea({
           }} />
         );
       })()}
-      {blocks.map(block => <BlockWrapper key={block.id} block={block} />)}
+
+      {/* Step 2: Empty Canvas Helper Text */}
+      {blocks.length === 0 && !cursorPos && (
+        <div
+          className="position-absolute top-50 start-50 translate-middle text-muted user-select-none opacity-50 text-center"
+          style={{ pointerEvents: 'none', width: '300px' }}
+        >
+          <h5>Canvas is empty</h5>
+          <p className="mb-0">Click anywhere to start typing</p>
+        </div>
+      )}
+
+      {blocks.map(block => <BlockWrapper key={block.id} block={block} res={results[block.id] ?? {}} />)}
     </>
   );
 
   return (
     <div
       ref={graphPaperRef}
-className={`graph-paper flex-grow-1 ${paperMode ? 'paper-mode-backdrop' : 'infinite-canvas-bg'} ${!paperMode && showGrid ? 'grid-bg' : ''} ${marquee ? 'is-selecting' : ''}`}
+      className={`graph-paper flex-grow-1 ${paperMode ? 'paper-mode-backdrop' : 'infinite-canvas-bg'} ${!paperMode && showGrid ? 'grid-bg' : ''} ${marquee ? 'is-selecting' : ''}`}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}

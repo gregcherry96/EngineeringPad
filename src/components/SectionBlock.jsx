@@ -1,9 +1,10 @@
 import React, { useEffect, useRef } from 'react';
 import { useBlockNavigation } from '../hooks';
-import { useWorkspaceData } from '../WorkspaceContext';
+import { useWorkspaceActionData } from '../WorkspaceContext';
 
 export default function SectionBlock({ id, initialValue, setFocus }) {
-const { actions } = useWorkspaceData();
+  // Pull actions from the new Actions context
+  const { actions } = useWorkspaceActionData();
   const inputRef = useRef(null);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
