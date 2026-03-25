@@ -6,7 +6,15 @@ export function useHistory(initialState = [], limit = 60) {
   const redoStack = useRef([]);
 
   const pushUndo = useCallback((snapshot) => {
-    if (undoStack.current.length > 0 && JSON.stringify(undoStack.current.at(-1)) === JSON.stringify(snapshot)) return;
+    if (undoStack.current.length > 0) {
+      const lastSnapshot = undoStack.current.at(-1);
+
+      // Step 2: Optimize check by testing reference equality first before deep stringify
+      if (lastSnapshot === snapshot || JSON.stringify(lastSnapshot) === JSON.stringify(snapshot)) {
+        return;
+      }
+    }
+
     undoStack.current.push(snapshot);
     if (undoStack.current.length > limit) undoStack.current.shift();
     redoStack.current = [];

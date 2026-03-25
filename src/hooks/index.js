@@ -5,3 +5,4 @@ export { useMathEvaluation } from './useMathEvaluation';
 export { useWorkspaceActions } from './useWorkspaceActions';
 export { useGlobalShortcuts } from './useGlobalShortcuts';
 export { useBlockShortcuts } from './useBlockShortcuts';
+export { useMarqueeSelection } from './useMarqueeSelection';

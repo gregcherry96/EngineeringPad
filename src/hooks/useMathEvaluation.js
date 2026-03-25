@@ -7,11 +7,17 @@ export function useMathEvaluation(blocks, unitOverrides, setUnitOverrides) {
   const workerRef = useRef(null);
 
   useEffect(() => {
+    // Step 1: Track if the hook is mounted to prevent state updates on unmounted components
+    let isActive = true;
+
     workerRef.current = new Worker(new URL('../workers/mathWorker.js', import.meta.url), {
       type: 'module'
     });
 
     workerRef.current.onmessage = (e) => {
+      // Prevent state updates if the component has unmounted
+      if (!isActive) return;
+
       const { results: newResults, userVars: newVars, rawResults: newRaw } = e.data;
 
       rawResultsRef.current = newRaw;
@@ -20,6 +26,7 @@ export function useMathEvaluation(blocks, unitOverrides, setUnitOverrides) {
     };
 
     return () => {
+      isActive = false;
       // Step 3: Strictly nullify to prevent accessing a terminated worker later
       if (workerRef.current) {
         workerRef.current.terminate();

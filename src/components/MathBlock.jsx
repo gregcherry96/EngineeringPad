@@ -65,7 +65,8 @@ function MathBlock({ id, initialValue, initialLatex, setFocus }) {
 
 const areEqual = (prevProps, nextProps) => {
   return prevProps.id === nextProps.id &&
-         prevProps.initialValue === nextProps.initialValue;
+         prevProps.initialValue === nextProps.initialValue &&
+         prevProps.initialLatex === nextProps.initialLatex;
 };
 
 export default memo(MathBlock, areEqual);

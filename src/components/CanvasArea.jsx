@@ -1,8 +1,9 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useRef } from 'react';
 import { useWorkspaceData, useWorkspaceInteraction, useWorkspaceActionData } from '../WorkspaceContext';
 import BlockWrapper from './BlockWrapper';
-import { GRID_SIZE, PAPER_SIZES, BLOCK_ESTIMATED_WIDTH, BLOCK_ESTIMATED_HEIGHT, CANVAS_PADDING, DOM_CLASSES } from '../utils/canvasConfig';
-import { calculateWorldCoordinates, calculateMarqueeBounds, getIntersectingBlocks } from '../utils/canvasUtils';
+import { GRID_SIZE, PAPER_SIZES, CANVAS_PADDING } from '../utils/canvasConfig';
+import { calculateMarqueeBounds } from '../utils/canvasUtils';
+import { useMarqueeSelection } from '../hooks/useMarqueeSelection';
 
 export default function CanvasArea({
   zoom, startPan, pan, stopPan, isPanning, spaceHeld, graphPaperRef,
@@ -12,90 +13,27 @@ export default function CanvasArea({
   const { selectedIds, cursorPos } = useWorkspaceInteraction();
   const { actions, updateBlocks } = useWorkspaceActionData();
 
-  const [marquee, setMarquee] = useState(null);
   const canvasRef = useRef(null);
-  const rafRef = useRef(null);
-  const mousePosRef = useRef(null);
 
-  const canvasToWorld = (clientX, clientY) => {
-    return calculateWorldCoordinates(clientX, clientY, canvasRef.current?.getBoundingClientRect(), zoom, GRID_SIZE);
-  };
+  const { marquee, handleMouseDown, handleMouseMove, handleMouseUp } = useMarqueeSelection({
+    canvasRef, zoom, blocks, selectedIds, actions, isPanning, spaceHeld, paperMode, updateBlocks
+  });
 
-  useEffect(() => {
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    };
-  }, []);
-
-  const handleMouseDown = (e) => {
+  const onMouseDown = (e) => {
     if (e.button === 1 || spaceHeld.current) { startPan(e); return; }
-
-    if (
-      e.target.closest(`.${DOM_CLASSES.BLOCK_CONTAINER}`) ||
-      e.target.closest(`.${DOM_CLASSES.SIDEBAR}`) ||
-      e.target.closest(`.${DOM_CLASSES.NAVBAR}`)
-    ) return;
-
-    if (paperMode && !e.target.closest(`.${DOM_CLASSES.CANVAS}`)) return;
-
-    const { x, y } = canvasToWorld(e.clientX, e.clientY);
-
-    setMarquee({ startX: x, startY: y, endX: x, endY: y, initialSelection: e.shiftKey ? selectedIds : [] });
-
-    if (!e.shiftKey) {
-      actions.select([]);
-    }
-    actions.setCursorPos(null);
+    handleMouseDown(e);
   };
 
-  const handleMouseMove = (e) => {
+  const onMouseMove = (e) => {
     if (isPanning.current) { pan(e); return; }
-    if (marquee) {
-      mousePosRef.current = { clientX: e.clientX, clientY: e.clientY };
-
-      if (!rafRef.current) {
-        rafRef.current = requestAnimationFrame(() => {
-          if (!mousePosRef.current) return;
-
-          const { x, y } = canvasToWorld(mousePosRef.current.clientX, mousePosRef.current.clientY);
-          setMarquee(prev => ({ ...prev, endX: x, endY: y }));
-
-          const currentMarquee = { ...marquee, endX: x, endY: y };
-          const bounds = calculateMarqueeBounds(currentMarquee);
-
-          const newlySelectedBlocks = getIntersectingBlocks(blocks, bounds, BLOCK_ESTIMATED_WIDTH, BLOCK_ESTIMATED_HEIGHT);
-          const newlySelected = newlySelectedBlocks.map(b => b.id);
-
-          actions.select([...new Set([...marquee.initialSelection, ...newlySelected])]);
-
-          rafRef.current = null;
-        });
-      }
-    }
+    handleMouseMove(e);
   };
 
-  const handleMouseUp = (e) => {
+  const onMouseUp = (e) => {
     if (isPanning.current) stopPan();
-    if (rafRef.current) {
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
-    }
-
-    if (marquee) {
-      const bounds = calculateMarqueeBounds(marquee);
-
-      if (bounds.dx < 5 && bounds.dy < 5) {
-        const { x, y } = canvasToWorld(e.clientX, e.clientY);
-        actions.setCursorPos({ x, y });
-        const hasEmpty = blocks.some(b => !b.expression.trim());
-        if (hasEmpty) updateBlocks(p => p.filter(b => b.expression.trim()), true);
-      }
-      setMarquee(null);
-      mousePosRef.current = null;
-    }
+    handleMouseUp(e);
   };
 
-  // Step 3: Determine the correct cursor class
   const getInteractionCursor = () => {
     if (isPanning.current) return 'cursor-grabbing';
     if (spaceHeld.current) return 'cursor-grab';
@@ -120,15 +58,22 @@ export default function CanvasArea({
         );
       })()}
 
+      {/* Step 4: Enhanced empty state rendering */}
       {blocks.length === 0 && !cursorPos && (
         <div
-          // Step 4: Applied the 'empty-state-animated' class to make the helper text pulse gently
-          className="empty-state-animated position-absolute top-50 start-50 translate-middle text-muted user-select-none text-center"
-          style={{ pointerEvents: 'none', width: '300px' }}
+          className="empty-state-animated position-absolute top-50 start-50 translate-middle text-muted text-center"
+          style={{ width: '300px' }}
         >
           <h4 className="mb-2">Canvas is empty</h4>
-          <p className="mb-0">Click anywhere to start typing math.</p>
-          <p className="small mt-2 opacity-75">Hold Spacebar to pan.</p>
+          <p className="mb-3">Click anywhere to start typing math.</p>
+          <button
+            className="btn btn-primary empty-state-btn"
+            onClick={() => actions.setCursorPos({ x: 100, y: 100 })}
+            aria-label="Create new math block"
+          >
+            Add Math Block
+          </button>
+          <p className="small mt-3 opacity-75">Hold Spacebar to pan.</p>
         </div>
       )}
 
@@ -139,12 +84,11 @@ export default function CanvasArea({
   return (
     <div
       ref={graphPaperRef}
-      // Step 3: Injected `getInteractionCursor()` to apply the correct interaction mouse state
       className={`graph-paper flex-grow-1 ${getInteractionCursor()} ${paperMode ? 'paper-mode-backdrop' : 'infinite-canvas-bg'} ${!paperMode && showGrid ? 'grid-bg' : ''} ${marquee ? 'is-selecting' : ''}`}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
+      onMouseDown={onMouseDown}
+      onMouseMove={onMouseMove}
+      onMouseUp={onMouseUp}
+      onMouseLeave={onMouseUp}
     >
       {paperMode ? (
         <div className="d-flex justify-content-center" style={{ minWidth: `${a4.width * zoom + 80}px`, minHeight: `${a4.height * pageCount * zoom + 80}px`, padding: '40px' }}>

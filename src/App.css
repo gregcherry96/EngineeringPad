@@ -208,3 +208,26 @@ math-field { color: #1a1714; background: transparent; min-width: 30px; min-heigh
   background-color: rgba(0, 0, 0, 0.05);
   border-bottom: 1px dashed #6c757d;
 }
+
+.empty-state-btn {
+  border-radius: 20px;
+  padding: 0.5rem 1.5rem;
+  font-weight: 500;
+  transition: all 0.2s ease-in-out;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  pointer-events: auto; /* Required since parent empty-state might have pointer-events: none */
+}
+
+.empty-state-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
+}
+
+.empty-state-animated {
+  pointer-events: none;
+}
+
+.empty-state-animated .empty-state-btn {
+  /* Restore pointer events strictly for the interactive button */
+  pointer-events: auto;
+}
